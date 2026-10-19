@@ -1,0 +1,15 @@
+[Unit]
+Description=Hyprdrop Background Daemon for Hyprland
+Documentation=https://github.com/hyprland-community/hyprdrop
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/hyprdrop --daemon
+Restart=on-failure
+RestartSec=2s
+Slice=app.slice
+
+[Install]
+WantedBy=graphical-session.target

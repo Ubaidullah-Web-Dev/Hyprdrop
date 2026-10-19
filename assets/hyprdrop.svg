@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <defs>
+    <radialGradient id="surfaceGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#212124" />
+      <stop offset="100%" stop-color="#161618" />
+    </radialGradient>
+    <linearGradient id="orangeAccent" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FF784E" />
+      <stop offset="100%" stop-color="#FF5722" />
+    </linearGradient>
+    <filter id="subtleShadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="6" stdDeviation="8" flood-color="#000000" flood-opacity="0.45" />
+    </filter>
+  </defs>
+
+  <!-- Outer disc surface -->
+  <circle cx="128" cy="128" r="116" fill="url(#surfaceGlow)" stroke="rgba(255,255,255,0.08)" stroke-width="2" filter="url(#subtleShadow)" />
+
+  <!-- Radial Segment Active Slice (International Warm Orange) -->
+  <path d="M 128,128 L 128,24 A 104,104 0 0,1 201.5,54.5 Z" fill="url(#orangeAccent)" stroke="rgba(255,255,255,0.15)" stroke-width="1.5" />
+
+  <!-- Subtle slice dividers -->
+  <circle cx="128" cy="128" r="104" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="1" />
+  <line x1="128" y1="24" x2="128" y2="76" stroke="rgba(255,255,255,0.12)" stroke-width="1.5" />
+  <line x1="232" y1="128" x2="180" y2="128" stroke="rgba(255,255,255,0.12)" stroke-width="1.5" />
+  <line x1="128" y1="232" x2="128" y2="180" stroke="rgba(255,255,255,0.12)" stroke-width="1.5" />
+  <line x1="24" y1="128" x2="76" y2="128" stroke="rgba(255,255,255,0.12)" stroke-width="1.5" />
+
+  <!-- Center Hub with Ring -->
+  <circle cx="128" cy="128" r="44" fill="#161618" stroke="#FF5722" stroke-width="2.5" />
+
+  <!-- Drop / Arrow glyph in center hub -->
+  <path d="M 128,102 L 128,144 M 114,130 L 128,144 L 142,130" fill="none" stroke="#F4F4F6" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" />
+  <circle cx="128" cy="154" r="3" fill="#FF5722" />
+</svg>

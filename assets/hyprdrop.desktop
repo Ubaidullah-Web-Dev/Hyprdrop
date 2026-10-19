@@ -1,0 +1,20 @@
+[Desktop Entry]
+Name=Hyprdrop
+GenericName=Radial Drag-and-Drop Converter & Editor
+Comment=Ultra-lightweight radial file converter, studio editor, and drop-shelf utility for Hyprland
+Exec=hyprdrop settings
+Icon=hyprdrop
+Terminal=false
+Type=Application
+Categories=Utility;Graphics;AudioVideo;FileTools;
+Keywords=wayland;hyprland;converter;radial;crop;shelf;compress;
+StartupNotify=true
+Actions=Daemon;Trigger;
+
+[Desktop Action Daemon]
+Name=Start Background Daemon
+Exec=hyprdrop --daemon
+
+[Desktop Action Trigger]
+Name=Trigger Radial Overlay
+Exec=hyprdrop trigger
