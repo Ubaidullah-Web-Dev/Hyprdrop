@@ -2,7 +2,8 @@ use std::process::Command;
 use gtk4::prelude::*;
 use crate::config::ConfigManager;
 use crate::engine::format_file_size;
-use crate::hyprland::installer::{configure_hyprland, is_hyprland_configured};
+use crate::hyprland::installer::{configure_hyprland, get_hyprland_config_info};
+
 
 pub struct SettingsApp;
 
@@ -223,18 +224,29 @@ fn build_preferences_tab() -> gtk4::Box {
     h_title.set_halign(gtk4::Align::Start);
     hypr_section.append(&h_title);
 
-    let is_conf = is_hyprland_configured();
+    let (is_conf, config_path, format) = get_hyprland_config_info();
+    let config_file_name = config_path.file_name().and_then(|n| n.to_str()).unwrap_or("hyprland.lua");
     let status_text = if is_conf {
-        "Status: Hyprland configuration active (blur, ignorezero, Shift+Drag bind configured)."
+        format!(
+            "Status: Hyprland configuration active in {} ({} syntax: blur, ignorezero, Shift+Mouse bind configured).",
+            config_file_name,
+            format.display_name()
+        )
     } else {
-        "Status: Hyprland rules not yet detected in ~/.config/hypr/hyprland.conf."
+        format!(
+            "Status: Hyprland rules not yet detected in {}.",
+            config_path.display()
+        )
     };
-    let h_status = gtk4::Label::new(Some(status_text));
+    let h_status = gtk4::Label::new(Some(&status_text));
     h_status.add_css_class("hyprdrop-subtitle");
     h_status.set_halign(gtk4::Align::Start);
     hypr_section.append(&h_status);
 
-    let config_btn = gtk4::Button::with_label("Configure Hyprland Automatically (Backup + Rules)");
+    let config_btn = gtk4::Button::with_label(&format!(
+        "Configure Hyprland Automatically ({}: Backup + Rules)",
+        format.display_name()
+    ));
     config_btn.add_css_class("hyprdrop-primary");
     config_btn.set_halign(gtk4::Align::Start);
 
@@ -246,9 +258,12 @@ fn build_preferences_tab() -> gtk4::Box {
                 if res.already_configured {
                     status_lbl_clone.set_text("Hyprland is already configured for Hyprdrop.");
                 } else {
-                    let backup_str = res.backup_path.map(|p| p.display().to_string()).unwrap_or_default();
+                    let backup_str = res.backup_path.map(|p| p.display().to_string()).unwrap_or_else(|| "No prior file".to_string());
+                    let file_display = res.config_path.file_name().and_then(|n| n.to_str()).unwrap_or("config");
                     status_lbl_clone.set_text(&format!(
-                        "Successfully configured! Backup created at: {}",
+                        "Successfully configured {} ({})! Backup: {}",
+                        file_display,
+                        res.format.display_name(),
                         backup_str
                     ));
                     btn_clone.set_sensitive(false);
@@ -261,6 +276,7 @@ fn build_preferences_tab() -> gtk4::Box {
     });
     hypr_section.append(&config_btn);
     box_view.append(&hypr_section);
+
 
     // General Preferences Card
     let pref_section = gtk4::Box::new(gtk4::Orientation::Vertical, 12);

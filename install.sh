@@ -5,11 +5,19 @@ echo "=========================================================="
 echo "           Hyprdrop — Arch Linux / Hyprland Installer     "
 echo "=========================================================="
 
-PREFIX="${PREFIX:-/usr/local}"
+if [ -z "${PREFIX:-}" ]; then
+    if [ -w "/usr/local/bin" ]; then
+        PREFIX="/usr/local"
+    else
+        PREFIX="${HOME}/.local"
+    fi
+fi
 BIN_DIR="${PREFIX}/bin"
 APP_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
 ICON_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/icons/hicolor/scalable/apps"
 SYSTEMD_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
+
+mkdir -p "${BIN_DIR}" "${APP_DIR}" "${ICON_DIR}" "${SYSTEMD_DIR}"
 
 # 1. Build release binary if not present
 if [ ! -f "target/release/hyprdrop" ]; then
@@ -19,7 +27,7 @@ fi
 
 # 2. Install binary
 echo "==> Installing hyprdrop binary to ${BIN_DIR}..."
-if [ -w "${BIN_DIR}" ]; then
+if [ -w "${BIN_DIR}" ] || [ -w "$(dirname "${BIN_DIR}")" ]; then
     install -Dm755 "target/release/hyprdrop" "${BIN_DIR}/hyprdrop"
 else
     echo "Requesting sudo privileges for ${BIN_DIR} installation..."
@@ -33,7 +41,7 @@ install -Dm644 "assets/hyprdrop.svg" "${ICON_DIR}/hyprdrop.svg"
 
 # 4. Install systemd user service
 echo "==> Installing systemd user daemon service..."
-install -Dm644 "assets/hyprdrop.service" "${SYSTEMD_DIR}/hyprdrop.service"
+sed "s|ExecStart=.*|ExecStart=${BIN_DIR}/hyprdrop --daemon|g" assets/hyprdrop.service > "${SYSTEMD_DIR}/hyprdrop.service"
 
 # Reload desktop database
 if command -v update-desktop-database >/dev/null 2>&1; then
@@ -63,7 +71,10 @@ echo "==> Running Hyprland auto-configuration..."
 echo ""
 echo "=========================================================="
 echo "   Hyprdrop installation completed successfully!          "
+echo "   Daemon & Tray: hyprdrop --daemon (StatusNotifierItem) "
 echo "   Trigger with: hyprdrop trigger                         "
 echo "   Settings GUI: hyprdrop settings                        "
-echo "   Hyprland Bind: bind = SHIFT, mouse:272, exec, hyprdrop trigger"
+echo "   Lua Bind:   hl.bind(\"SHIFT + mouse:272\", hl.dsp.exec_cmd(\"hyprdrop trigger\"))"
+echo "   Conf Bind:  bind = SHIFT, mouse:272, exec, hyprdrop trigger"
 echo "=========================================================="
+

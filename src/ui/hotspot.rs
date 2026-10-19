@@ -1,9 +1,14 @@
+use std::cell::RefCell;
 use gtk4::gdk;
 use gtk4::glib;
 use gtk4::prelude::*;
 use gtk4_layer_shell::{Edge, Layer, LayerShell};
 use crate::hyprland::get_cursor_position;
 use crate::ui::overlay_window::{OverlayWindow, extract_paths_from_drop_value};
+
+thread_local! {
+    static ACTIVE_HOTSPOT: RefCell<Option<gtk4::ApplicationWindow>> = const { RefCell::new(None) };
+}
 
 pub struct HotspotWindow;
 
@@ -15,6 +20,8 @@ impl HotspotWindow {
             return;
         }
 
+        Self::close();
+
         let window = gtk4::ApplicationWindow::builder()
             .application(app)
             .title("Hyprdrop Edge Hotspot")
@@ -23,6 +30,7 @@ impl HotspotWindow {
             .resizable(false)
             .decorated(false)
             .build();
+
 
         window.add_css_class("hyprdrop-hotspot");
 
@@ -91,6 +99,55 @@ impl HotspotWindow {
         window.add_controller(click);
 
         window.set_child(Some(&bar));
+
+        let win_weak = window.downgrade();
+        window.connect_destroy(move |_| {
+            ACTIVE_HOTSPOT.with(|cell| {
+                if let Ok(mut opt) = cell.try_borrow_mut()
+                    && let Some(ref w) = *opt
+                {
+                    if let Some(curr) = win_weak.upgrade() {
+                        if w == &curr {
+                            *opt = None;
+                        }
+                    } else {
+                        *opt = None;
+                    }
+                }
+            });
+        });
+
+        ACTIVE_HOTSPOT.with(|cell| {
+            *cell.borrow_mut() = Some(window.clone());
+        });
+
         window.present();
     }
+
+    /// Closes the active edge hotspot if running.
+    pub fn close() {
+        let win_opt = ACTIVE_HOTSPOT.with(|cell| cell.borrow_mut().take());
+        if let Some(win) = win_opt {
+            win.close();
+        }
+    }
+
+    /// Toggles the edge drop target hotspot on or off. Returns whether it is now active.
+    pub fn toggle(app: &gtk4::Application) -> bool {
+        let existing = ACTIVE_HOTSPOT.with(|cell| cell.borrow_mut().take());
+        if let Some(win) = existing {
+            win.close();
+            false
+        } else {
+            Self::spawn(app);
+            true
+        }
+    }
+
+    /// Checks if the edge drop target hotspot is currently active.
+    pub fn is_active() -> bool {
+        ACTIVE_HOTSPOT.with(|cell| cell.borrow().is_some())
+    }
+
 }
+

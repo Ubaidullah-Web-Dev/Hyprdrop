@@ -4,6 +4,8 @@ pub mod modals;
 pub mod overlay_window;
 pub mod radial_menu;
 pub mod settings_app;
+pub mod tray;
+
 
 use gtk4::gdk::Display;
 use gtk4::CssProvider;

@@ -67,7 +67,29 @@ Immediately following any conversion or studio edit, Hyprdrop spawns a compact f
 
 ## Hyprland Configuration
 
-Add the following rules and keybind to your `~/.config/hypr/hyprland.conf`:
+Hyprdrop supports both modern **`hyprland.lua`** (Hyprland's native Lua syntax) and classic **`hyprland.conf`**.
+
+### 1. Modern Lua Syntax (`~/.config/hypr/hyprland.lua`)
+
+```lua
+-- --- Hyprdrop Radial Utility ---
+hl.layer_rule({
+    name = "hyprdrop",
+    match = { namespace = "hyprdrop" },
+    blur = true,
+    ignore_alpha = 0.0,
+    animation = "popin 80%",
+})
+
+-- Shift + Left Click drag activation
+hl.bind(
+    "SHIFT + mouse:272",
+    hl.dsp.exec_cmd("hyprdrop trigger"),
+    { description = "Hyprdrop Radial Trigger" }
+)
+```
+
+### 2. Classic Syntax (`~/.config/hypr/hyprland.conf`)
 
 ```ini
 # --- Hyprdrop Radial Utility ---
@@ -77,12 +99,10 @@ layerrule = animation popin 80%, hyprdrop
 
 # Shift + Left Click drag activation
 bind = SHIFT, mouse:272, exec, hyprdrop trigger
-
-# Keyboard toggle hotkey (e.g. Super + D)
-bind = SUPER, D, exec, hyprdrop toggle
 ```
 
-Alternatively, open `hyprdrop settings` and click **"Configure Hyprland Automatically"**.
+Alternatively, open `hyprdrop settings` and click **"Configure Hyprland Automatically"** to auto-detect your active configuration format, create an automated timestamped backup, and inject the rules.
+
 
 ---
 
@@ -119,8 +139,9 @@ cargo build --release
 
 | Command | Description |
 | :--- | :--- |
-| `hyprdrop --daemon` | Starts the background daemon listening on Unix domain socket |
+| `hyprdrop --daemon` | Starts the background daemon with StatusNotifierItem (SNI) tray icon, context menu, and IPC server |
 | `hyprdrop trigger [file]` | Triggers the radial overlay centered under the cursor |
+
 | `hyprdrop toggle` | Toggles overlay visibility |
 | `hyprdrop settings` | Opens the desktop settings, activity history, and health checker |
 | `hyprdrop <file>` | Spawns radial overlay preloaded with `<file>` |

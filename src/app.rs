@@ -49,6 +49,13 @@ impl HyprdropApp {
             init_css_theme();
         });
 
+        app.connect_shutdown(|_| {
+            let sock_path = crate::config::ConfigManager::socket_path();
+            if sock_path.exists() {
+                let _ = std::fs::remove_file(sock_path);
+            }
+        });
+
         let cli_activate = cli_rc.clone();
         app.connect_activate(move |app| {
             if cli_activate.daemon {
@@ -83,6 +90,12 @@ impl HyprdropApp {
 
         // Spawn edge hotspot fallback widget anchored to screen edge
         crate::ui::hotspot::HotspotWindow::spawn(app);
+
+        // Spawn StatusNotifierItem / DBusMenu system tray icon
+        if let Err(e) = crate::ui::tray::TrayManager::spawn(app) {
+            eprintln!("Failed to initialize system tray icon: {:?}", e);
+        }
+
 
         let listener = match IpcServer::bind() {
             Ok(l) => Rc::new(RefCell::new(l)),

@@ -67,3 +67,59 @@ fn test_ipc_message_serialization() {
     let deser3: IpcMessage = serde_json::from_str(&json3).expect("Failed to deserialize");
     assert!(matches!(deser3, IpcMessage::Settings));
 }
+
+#[test]
+fn test_object_path_and_tooltip_variant() {
+    use gtk4::glib::{self, prelude::*};
+
+    let obj = glib::variant::ObjectPath::try_from("/MenuBar").unwrap();
+    let obj_var = obj.to_variant();
+    assert_eq!(obj_var.type_().as_str(), "o");
+
+    let empty_pixmap: Vec<(i32, i32, Vec<u8>)> = Vec::new();
+    let tooltip = ("hyprdrop", empty_pixmap, "Hyprdrop", "Radial file converter & drop shelf").to_variant();
+    assert_eq!(tooltip.type_().as_str(), "(sa(iiay)ss)");
+}
+
+#[test]
+fn test_dbusmenu_method_return_signatures() {
+    use std::collections::HashMap;
+    use gtk4::glib::{self, prelude::*};
+
+    // 1. AboutToShow returns (b)
+    let about_to_show_ret = (false,).to_variant();
+    assert_eq!(about_to_show_ret.type_().as_str(), "(b)");
+    assert!(about_to_show_ret.is_container());
+
+    // 2. GetGroupProperties returns (a(ia{sv}))
+    let mut map = HashMap::<String, glib::Variant>::new();
+    map.insert("label".into(), "Trigger Overlay".to_variant());
+    let props: Vec<(i32, HashMap<String, glib::Variant>)> = vec![(1, map)];
+    let get_group_props_ret = (props,).to_variant();
+    assert_eq!(get_group_props_ret.type_().as_str(), "(a(ia{sv}))");
+    assert!(get_group_props_ret.is_container());
+
+    // 3. GetProperty returns (v)
+    let label_var = "Trigger Overlay".to_variant();
+    let wrapped = glib::Variant::from_variant(&label_var);
+    let get_prop_ret = (wrapped,).to_variant();
+    assert_eq!(get_prop_ret.type_().as_str(), "(v)");
+    assert!(get_prop_ret.is_container());
+
+    // 4. EventGroup returns (ai)
+    let empty_errs: Vec<i32> = Vec::new();
+    let event_group_ret = (empty_errs,).to_variant();
+    assert_eq!(event_group_ret.type_().as_str(), "(ai)");
+    assert!(event_group_ret.is_container());
+
+    // 5. AboutToShowGroup returns (aiai)
+    let empty_a: Vec<i32> = Vec::new();
+    let empty_b: Vec<i32> = Vec::new();
+    let about_to_show_group_ret = (empty_a, empty_b).to_variant();
+    assert_eq!(about_to_show_group_ret.type_().as_str(), "(aiai)");
+    assert!(about_to_show_group_ret.is_container());
+}
+
+
+
+

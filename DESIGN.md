@@ -29,6 +29,8 @@ Active interactions and targeted format slices illuminate with International War
 - **Inputs & Sliders**: Flat elevated inputs with crisp monospace readouts. Sliders feature warm orange fill tracks.
 - **Modals**: Window geometry centered on monitor or cursor, bordered with `rgba(255, 255, 255, 0.08)`, frosted background.
 - **Drop Shelf**: Minimal floating card with Draggable thumbnail, file size badge, and close button.
+- **System Tray Icon (SNI)**: 32x32 px vector/ARGB icon. Donut geometry echoing radial widget geometry in International Warm Orange (`#FF5722`) with Studio Graphite (`#161618`) center hub. D-Bus context menu providing quick actions: Trigger Overlay, Settings & Activity History, Toggle Edge Hotspot, and Quit.
+
 
 ## 5. Layout & Spatial Principles
 - Center-anchored coordinate mapping: Cursor-driven spawning directly under pointer via `hyprctl cursorpos -j`.
