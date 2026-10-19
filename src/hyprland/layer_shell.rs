@@ -23,16 +23,23 @@ pub fn configure_layer_shell_window(
     let cursor = cursor_override.unwrap_or_else(get_cursor_position);
     let monitors = get_monitors();
 
-    // Find monitor containing cursor
+    // Find monitor containing cursor using logical dimensions (scaled by m.scale)
     let current_mon = monitors.iter().find(|m| {
+        let logical_w = (m.width as f64 / m.scale.max(0.1)) as i32;
+        let logical_h = (m.height as f64 / m.scale.max(0.1)) as i32;
         cursor.x >= m.x
-            && cursor.x < (m.x + m.width)
+            && cursor.x < (m.x + logical_w)
             && cursor.y >= m.y
-            && cursor.y < (m.y + m.height)
+            && cursor.y < (m.y + logical_h)
     });
 
     let (mon_x, mon_y, mon_w, mon_h) = match current_mon {
-        Some(m) => (m.x, m.y, (m.width as f64 / m.scale) as i32, (m.height as f64 / m.scale) as i32),
+        Some(m) => (
+            m.x,
+            m.y,
+            (m.width as f64 / m.scale.max(0.1)) as i32,
+            (m.height as f64 / m.scale.max(0.1)) as i32,
+        ),
         None => (0, 0, 1920, 1080),
     };
 

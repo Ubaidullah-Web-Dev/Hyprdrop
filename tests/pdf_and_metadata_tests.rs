@@ -20,8 +20,8 @@ fn create_sample_pdf(path: &std::path::Path, title: &str, author: &str) {
         },
     });
 
-    let content = format!("BT /F1 18 Tf 50 700 Td (Hello Hyprdrop PDF Engine) Tj ET");
-    let content_id = doc.add_object(Stream::new(dictionary! {}, content.into_bytes()));
+    let content = "BT /F1 18 Tf 50 700 Td (Hello Hyprdrop PDF Engine) Tj ET";
+    let content_id = doc.add_object(Stream::new(dictionary! {}, content.as_bytes().to_vec()));
 
     let page_id = doc.add_object(dictionary! {
         "Type" => "Page",

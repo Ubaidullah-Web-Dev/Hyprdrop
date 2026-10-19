@@ -25,19 +25,19 @@ pub struct MonitorInfo {
 /// Queries `hyprctl cursorpos -j` for current mouse pointer coordinates.
 /// Falls back to monitor center or (960, 540) if outside Hyprland.
 pub fn get_cursor_position() -> CursorPos {
-    if let Ok(output) = Command::new("hyprctl").args(["cursorpos", "-j"]).output() {
-        if output.status.success() {
-            if let Ok(pos) = serde_json::from_slice::<CursorPos>(&output.stdout) {
+    if let Ok(output) = Command::new("hyprctl").args(["cursorpos", "-j"]).output()
+        && output.status.success()
+            && let Ok(pos) = serde_json::from_slice::<CursorPos>(&output.stdout) {
                 return pos;
             }
-        }
-    }
 
     // Fallback: check focused monitor
     if let Some(mon) = get_focused_monitor() {
+        let logical_w = (mon.width as f64 / mon.scale.max(0.1)) as i32;
+        let logical_h = (mon.height as f64 / mon.scale.max(0.1)) as i32;
         return CursorPos {
-            x: mon.x + (mon.width as f64 / (mon.scale * 2.0)) as i32,
-            y: mon.y + (mon.height as f64 / (mon.scale * 2.0)) as i32,
+            x: mon.x + logical_w / 2,
+            y: mon.y + logical_h / 2,
         };
     }
 
@@ -46,14 +46,15 @@ pub fn get_cursor_position() -> CursorPos {
 
 /// Queries `hyprctl monitors -j` for all connected monitors.
 pub fn get_monitors() -> Vec<MonitorInfo> {
-    if let Ok(output) = Command::new("hyprctl").args(["monitors", "-j"]).output() {
-        if output.status.success() {
-            if let Ok(monitors) = serde_json::from_slice::<Vec<MonitorInfo>>(&output.stdout) {
-                return monitors;
-            }
-        }
+    let Ok(output) = Command::new("hyprctl").args(["monitors", "-j"]).output() else {
+        return Vec::new();
+    };
+
+    if !output.status.success() {
+        return Vec::new();
     }
-    Vec::new()
+
+    serde_json::from_slice::<Vec<MonitorInfo>>(&output.stdout).unwrap_or_default()
 }
 
 /// Gets the currently focused monitor or first available monitor.

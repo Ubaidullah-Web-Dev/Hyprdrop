@@ -24,28 +24,19 @@ impl HyprdropApp {
                     Commands::Toggle => Some(IpcMessage::Toggle),
                     Commands::Settings => Some(IpcMessage::Settings),
                 }
-            } else if let Some(ref file) = cli.file {
-                Some(IpcMessage::Trigger {
+            } else { cli.file.as_ref().map(|file| IpcMessage::Trigger {
                     file: Some(file.clone()),
-                })
-            } else {
-                None
-            };
+                }) };
 
-            if let Some(ref m) = msg {
-                if let Ok(true) = IpcClient::send(m) {
+            if let Some(ref m) = msg
+                && let Ok(true) = IpcClient::send(m) {
                     // Message successfully handled by running daemon
                     return glib::ExitCode::SUCCESS;
                 }
-            }
         }
 
         // Otherwise, initialize GTK Application
-        let app_flags = if cli.daemon {
-            ApplicationFlags::NON_UNIQUE
-        } else {
-            ApplicationFlags::NON_UNIQUE
-        };
+        let app_flags = ApplicationFlags::NON_UNIQUE;
 
         let app = gtk4::Application::builder()
             .application_id("org.hyprland.hyprdrop")
@@ -69,7 +60,7 @@ impl HyprdropApp {
                         OverlayWindow::spawn(app, target);
                     }
                     Commands::Toggle => {
-                        OverlayWindow::spawn(app, cli_activate.file.clone());
+                        OverlayWindow::toggle(app, cli_activate.file.clone());
                     }
                     Commands::Settings => {
                         SettingsApp::spawn(app);
@@ -89,6 +80,9 @@ impl HyprdropApp {
     fn start_daemon_loop(app: &gtk4::Application) {
         // Retain hold guard so GTK application daemon stays alive indefinitely
         Box::leak(Box::new(app.hold()));
+
+        // Spawn edge hotspot fallback widget anchored to screen edge
+        crate::ui::hotspot::HotspotWindow::spawn(app);
 
         let listener = match IpcServer::bind() {
             Ok(l) => Rc::new(RefCell::new(l)),
@@ -110,7 +104,7 @@ impl HyprdropApp {
                         OverlayWindow::spawn(&app_timer, file);
                     }
                     IpcMessage::Toggle => {
-                        OverlayWindow::spawn(&app_timer, None);
+                        OverlayWindow::toggle(&app_timer, None);
                     }
                     IpcMessage::Settings => {
                         SettingsApp::spawn(&app_timer);

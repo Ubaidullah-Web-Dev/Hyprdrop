@@ -32,6 +32,7 @@ struct StudioState {
     start_y: f64,
     current_x: f64,
     current_y: f64,
+    callout_text: String,
 }
 
 pub fn open_redact_annotate_modal(
@@ -58,6 +59,7 @@ pub fn open_redact_annotate_modal(
         start_y: 0.0,
         current_x: 0.0,
         current_y: 0.0,
+        callout_text: "NOTE".to_string(),
     }));
 
     let window = gtk4::Window::builder()
@@ -101,6 +103,21 @@ pub fn open_redact_annotate_modal(
         toolbar.append(&btn);
         tool_buttons.push((btn, tool));
     }
+
+    let callout_lbl = gtk4::Label::new(Some("Callout:"));
+    callout_lbl.add_css_class("hyprdrop-subtitle");
+    toolbar.append(&callout_lbl);
+
+    let callout_entry = gtk4::Entry::builder()
+        .placeholder_text("Callout text...")
+        .text("NOTE")
+        .width_chars(12)
+        .build();
+    let state_entry = state.clone();
+    callout_entry.connect_changed(move |e| {
+        state_entry.borrow_mut().callout_text = e.text().to_string();
+    });
+    toolbar.append(&callout_entry);
 
     let spacer = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
     spacer.set_hexpand(true);
@@ -236,11 +253,12 @@ pub fn open_redact_annotate_modal(
                 });
             }
             ToolKind::TextCallout => {
+                let callout_text = s.callout_text.clone();
                 s.annotations.push(AnnotationElement::TextCallout {
                     x: start_x.round() as u32,
                     y: start_y.round() as u32,
-                    text: "Callout".to_string(),
-                    color: [239, 68, 68, 255],
+                    text: callout_text,
+                    color: [255, 87, 34, 255],
                 });
             }
         }
@@ -332,7 +350,7 @@ pub fn open_redact_annotate_modal(
 fn get_transform(cw: f64, ch: f64, iw: f64, ih: f64) -> (f64, f64, f64) {
     let sx = (cw - 32.0) / iw;
     let sy = (ch - 32.0) / ih;
-    let scale = sx.min(sy).min(1.0).max(0.01);
+    let scale = sx.min(sy).clamp(0.01, 1.0);
     let vx = (cw - iw * scale) / 2.0;
     let vy = (ch - ih * scale) / 2.0;
     (vx, vy, scale)

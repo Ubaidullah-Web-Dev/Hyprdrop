@@ -16,22 +16,21 @@ pub fn extract_pdf_text(pdf_path: &Path) -> Result<String> {
     page_numbers.sort_unstable();
 
     for page_num in page_numbers {
-        if let Ok(text) = doc.extract_text(&[page_num]) {
-            if !text.trim().is_empty() {
+        if let Ok(text) = doc.extract_text(&[page_num])
+            && !text.trim().is_empty() {
                 if !full_text.is_empty() {
                     full_text.push_str("\n\n--- Page Break ---\n\n");
                 }
                 full_text.push_str(text.trim());
             }
-        }
     }
 
     if full_text.trim().is_empty() {
         // Fallback: search for all stream text
-        for (_, object) in doc.objects.iter() {
-            if let Object::Stream(stream) = object {
-                if let Ok(content) = stream.decompressed_content() {
-                    if let Ok(s) = std::str::from_utf8(&content) {
+        for object in doc.objects.values() {
+            if let Object::Stream(stream) = object
+                && let Ok(content) = stream.decompressed_content()
+                    && let Ok(s) = std::str::from_utf8(&content) {
                         for line in s.lines() {
                             if line.ends_with("Tj") || line.ends_with("TJ") {
                                 full_text.push_str(line);
@@ -39,8 +38,6 @@ pub fn extract_pdf_text(pdf_path: &Path) -> Result<String> {
                             }
                         }
                     }
-                }
-            }
         }
     }
 
@@ -76,8 +73,12 @@ pub fn render_pdf_to_image(pdf_path: &Path, output_path: &Path, format: &str) ->
 
     // Look for generated file (typically prefix-1.png or prefix-01.png or prefix-1.jpg)
     let ext = if fmt_arg == "-jpeg" { "jpg" } else { "png" };
-    let candidate1 = parent.join(format!("{}-1.{}", temp_prefix.file_name().unwrap().to_str().unwrap(), ext));
-    let candidate2 = parent.join(format!("{}-01.{}", temp_prefix.file_name().unwrap().to_str().unwrap(), ext));
+    let prefix_name = temp_prefix
+        .file_name()
+        .and_then(|n| n.to_str())
+        .ok_or_else(|| anyhow!("Invalid temporary prefix filename"))?;
+    let candidate1 = parent.join(format!("{}-1.{}", prefix_name, ext));
+    let candidate2 = parent.join(format!("{}-01.{}", prefix_name, ext));
 
     let found = if candidate1.exists() {
         candidate1
@@ -147,10 +148,9 @@ pub fn convert_pdf_to(pdf_path: &Path, output_path: &Path, target_ext: &str) -> 
             Ok(output_path.to_path_buf())
         }
         "docx" => {
-            // If pandoc exists, use it; otherwise convert to markdown and note
             if let Ok(text) = extract_pdf_text(pdf_path) {
                 let temp_txt = output_path.with_extension("temp.txt");
-                fs::write(&temp_txt, text)?;
+                fs::write(&temp_txt, &text)?;
                 let status = Command::new("pandoc")
                     .arg(&temp_txt)
                     .arg("-o")
@@ -161,9 +161,24 @@ pub fn convert_pdf_to(pdf_path: &Path, output_path: &Path, target_ext: &str) -> 
                 if status.map(|s| s.success()).unwrap_or(false) {
                     return Ok(output_path.to_path_buf());
                 }
+
+                // Fallback: LibreOffice headless conversion
+                let out_dir = output_path.parent().unwrap_or_else(|| Path::new("."));
+                let lo_cmd = if Command::new("libreoffice").arg("--version").output().is_ok() {
+                    "libreoffice"
+                } else {
+                    "soffice"
+                };
+                let lo_status = Command::new(lo_cmd)
+                    .args(["--headless", "--convert-to", "docx", "--outdir"])
+                    .arg(out_dir)
+                    .arg(pdf_path)
+                    .status();
+                if lo_status.map(|s| s.success()).unwrap_or(false) {
+                    return Ok(output_path.to_path_buf());
+                }
             }
-            // Fallback: write text file with warning or error
-            Err(anyhow!("Pandoc is required for direct DOCX compilation"))
+            Err(anyhow!("Pandoc or LibreOffice is required for DOCX compilation"))
         }
         "pdf" => {
             // Optimize/re-compress PDF
@@ -182,10 +197,8 @@ pub fn inspect_pdf_metadata(pdf_path: &Path) -> Result<HashMap<String, String>> 
     let mut meta = HashMap::new();
     let maybe_dict = if let Ok(info_ref) = doc.trailer.get(b"Info").and_then(|o| o.as_reference()) {
         doc.get_dictionary(info_ref).ok()
-    } else if let Ok(info_dict) = doc.trailer.get(b"Info").and_then(|o| o.as_dict()) {
-        Some(info_dict)
     } else {
-        None
+        doc.trailer.get(b"Info").and_then(|o| o.as_dict()).ok()
     };
 
     if let Some(info_dict) = maybe_dict {
@@ -213,11 +226,10 @@ pub fn strip_pdf_metadata(pdf_path: &Path, output_path: &Path) -> Result<()> {
     doc.trailer.remove(b"Info");
 
     // Clear Catalog Metadata stream
-    if let Ok(cat_id) = doc.trailer.get(b"Root").and_then(|r| r.as_reference()) {
-        if let Ok(catalog) = doc.get_object_mut(cat_id).and_then(|o| o.as_dict_mut()) {
+    if let Ok(cat_id) = doc.trailer.get(b"Root").and_then(|r| r.as_reference())
+        && let Ok(catalog) = doc.get_object_mut(cat_id).and_then(|o| o.as_dict_mut()) {
             catalog.remove(b"Metadata");
         }
-    }
 
     doc.save(output_path)
         .with_context(|| format!("Failed to save stripped PDF to {}", output_path.display()))?;

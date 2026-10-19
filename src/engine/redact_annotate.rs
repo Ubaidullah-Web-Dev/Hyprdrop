@@ -89,13 +89,12 @@ pub fn apply_redactions_and_annotations(
                             }
                         }
 
-                        if count > 0 {
-                            let avg_p = Rgba([
-                                (sum_r / count) as u8,
-                                (sum_g / count) as u8,
-                                (sum_b / count) as u8,
-                                255,
-                            ]);
+                        if let (Some(r), Some(g), Some(b)) = (
+                            sum_r.checked_div(count),
+                            sum_g.checked_div(count),
+                            sum_b.checked_div(count),
+                        ) {
+                            let avg_p = Rgba([r as u8, g as u8, b as u8, 255]);
                             for py in by..(by + bh) {
                                 for px in bx..(bx + bw) {
                                     canvas.put_pixel(px, py, avg_p);
@@ -113,7 +112,7 @@ pub fn apply_redactions_and_annotations(
         }
     }
 
-    // Apply annotations
+    // Apply geometric annotations
     for a in annotations {
         match a {
             AnnotationElement::Rectangle { x, y, width, height, color, stroke_width } => {
@@ -140,22 +139,12 @@ pub fn apply_redactions_and_annotations(
             AnnotationElement::Arrow { x1, y1, x2, y2, color, stroke_width } => {
                 draw_arrow_line(&mut canvas, *x1, *y1, *x2, *y2, *stroke_width, Rgba(*color));
             }
-            AnnotationElement::TextCallout { x, y, text: _, color } => {
-                // Render callout marker dot
-                let col = Rgba(*color);
-                let r = 8i32;
-                for dy in -r..=r {
-                    for dx in -r..=r {
-                        if dx * dx + dy * dy <= r * r {
-                            let px = (*x as i32 + dx).clamp(0, img_w as i32 - 1) as u32;
-                            let py = (*y as i32 + dy).clamp(0, img_h as i32 - 1) as u32;
-                            canvas.put_pixel(px, py, col);
-                        }
-                    }
-                }
-            }
+            AnnotationElement::TextCallout { .. } => {}
         }
     }
+
+    // Apply text callouts with vector typography
+    render_text_callouts_cairo(&mut canvas, annotations);
 
     canvas
 }
@@ -217,6 +206,113 @@ fn draw_arrow_line(
             let py = (y2 as f32 + t * (wy - y2 as f32)).round() as i32;
             if px >= 0 && px < w && py >= 0 && py < h {
                 canvas.put_pixel(px as u32, py as u32, color);
+            }
+        }
+    }
+}
+
+fn render_text_callouts_cairo(canvas: &mut RgbaImage, annotations: &[AnnotationElement]) {
+    let callouts: Vec<&AnnotationElement> = annotations
+        .iter()
+        .filter(|a| matches!(a, AnnotationElement::TextCallout { .. }))
+        .collect();
+
+    if callouts.is_empty() {
+        return;
+    }
+
+    let w = canvas.width() as i32;
+    let h = canvas.height() as i32;
+    let stride = cairo::Format::ARgb32.stride_for_width(w as u32).unwrap_or(w * 4);
+
+    let mut bgra = Vec::with_capacity((w * h * 4) as usize);
+    for p in canvas.pixels() {
+        bgra.push(p[2]);
+        bgra.push(p[1]);
+        bgra.push(p[0]);
+        bgra.push(p[3]);
+    }
+
+    if let Ok(mut surface) = cairo::ImageSurface::create_for_data(
+        bgra,
+        cairo::Format::ARgb32,
+        w,
+        h,
+        stride,
+    ) {
+        if let Ok(cr) = cairo::Context::new(&surface) {
+            for a in callouts {
+                if let AnnotationElement::TextCallout { x, y, text, color } = a {
+                    let cx = *x as f64;
+                    let cy = *y as f64;
+
+                    cr.select_font_face("Sans", cairo::FontSlant::Normal, cairo::FontWeight::Bold);
+                    cr.set_font_size(13.0);
+                    let (tw, th, x_bear, y_bear) = match cr.text_extents(text) {
+                        Ok(ext) => (ext.width(), ext.height(), ext.x_bearing(), ext.y_bearing()),
+                        Err(_) => (50.0, 14.0, 0.0, -10.0),
+                    };
+
+                    let pad_h = 8.0;
+                    let pad_v = 5.0;
+                    let pw = tw + pad_h * 2.0;
+                    let ph = th + pad_v * 2.0;
+                    let px = (cx - pw / 2.0).clamp(4.0, (w as f64) - pw - 4.0);
+                    let py = (cy - ph - 8.0).clamp(4.0, (h as f64) - ph - 4.0);
+
+                    // Callout pointer pin triangle pointing to (cx, cy)
+                    cr.move_to(cx, cy);
+                    cr.line_to(cx - 5.0, py + ph);
+                    cr.line_to(cx + 5.0, py + ph);
+                    cr.close_path();
+                    cr.set_source_rgba(
+                        color[0] as f64 / 255.0,
+                        color[1] as f64 / 255.0,
+                        color[2] as f64 / 255.0,
+                        0.95,
+                    );
+                    let _ = cr.fill();
+
+                    // Rounded pill background
+                    let radius = 6.0;
+                    cr.new_sub_path();
+                    cr.arc(px + pw - radius, py + radius, radius, -std::f64::consts::PI / 2.0, 0.0);
+                    cr.arc(px + pw - radius, py + ph - radius, radius, 0.0, std::f64::consts::PI / 2.0);
+                    cr.arc(px + radius, py + ph - radius, radius, std::f64::consts::PI / 2.0, std::f64::consts::PI);
+                    cr.arc(px + radius, py + radius, radius, std::f64::consts::PI, 3.0 * std::f64::consts::PI / 2.0);
+                    cr.close_path();
+
+                    cr.set_source_rgba(0.08, 0.08, 0.10, 0.94);
+                    let _ = cr.fill_preserve();
+                    cr.set_source_rgba(
+                        color[0] as f64 / 255.0,
+                        color[1] as f64 / 255.0,
+                        color[2] as f64 / 255.0,
+                        0.95,
+                    );
+                    cr.set_line_width(1.5);
+                    let _ = cr.stroke();
+
+                    // Text
+                    cr.set_source_rgb(1.0, 1.0, 1.0);
+                    cr.move_to(px + pad_h - x_bear, py + pad_v - y_bear);
+                    let _ = cr.show_text(text);
+                }
+            }
+        }
+        surface.flush();
+        if let Ok(data) = surface.data() {
+            for y in 0..h as u32 {
+                for x in 0..w as u32 {
+                    let idx = (y as usize * stride as usize) + (x as usize * 4);
+                    if idx + 3 < data.len() {
+                        let b = data[idx];
+                        let g = data[idx + 1];
+                        let r = data[idx + 2];
+                        let a = data[idx + 3];
+                        canvas.put_pixel(x, y, Rgba([r, g, b, a]));
+                    }
+                }
             }
         }
     }

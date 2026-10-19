@@ -71,7 +71,7 @@ impl StudioBackgroundPreset {
 
     pub fn colors(&self) -> ((u8, u8, u8), (u8, u8, u8)) {
         match self {
-            Self::DeepStudio => ((22, 22, 26), ((36, 36, 44))),
+            Self::DeepStudio => ((22, 22, 26), (36, 36, 44)),
             Self::SunsetOrange => ((255, 87, 34), (255, 142, 60)),
             Self::MidnightNeon => ((15, 23, 42), (56, 189, 248)),
             Self::ForestGlow => ((12, 43, 26), (34, 197, 94)),
@@ -275,7 +275,7 @@ pub fn render_studio_background(
     shadow_intensity: f32,
     target_ratio: TargetAspectRatio,
 ) -> RgbaImage {
-    let mut rounded_img = apply_rounded_corners(&img.to_rgba8(), corner_radius);
+    let rounded_img = apply_rounded_corners(&img.to_rgba8(), corner_radius);
     let inner_w = rounded_img.width();
     let inner_h = rounded_img.height();
 
@@ -354,7 +354,7 @@ pub fn render_studio_background(
     }
 
     // Blend inner image onto canvas
-    imageops::overlay(&mut canvas, &mut rounded_img, inner_x as i64, inner_y as i64);
+    imageops::overlay(&mut canvas, &rounded_img, inner_x as i64, inner_y as i64);
 
     canvas
 }

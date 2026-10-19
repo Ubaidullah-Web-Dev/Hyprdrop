@@ -165,3 +165,12 @@ pub fn execute_conversion(source_path: &Path, target_slice: &str) -> Result<Path
         }
     }
 }
+
+/// Executes format conversion on multiple files concurrently using Rayon.
+pub fn execute_conversion_batch(source_paths: &[PathBuf], target_slice: &str) -> Vec<Result<PathBuf>> {
+    use rayon::prelude::*;
+    source_paths
+        .par_iter()
+        .map(|path| execute_conversion(path, target_slice))
+        .collect()
+}

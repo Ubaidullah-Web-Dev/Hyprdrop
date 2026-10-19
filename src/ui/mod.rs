@@ -1,4 +1,5 @@
 pub mod drop_shelf;
+pub mod hotspot;
 pub mod modals;
 pub mod overlay_window;
 pub mod radial_menu;
@@ -12,6 +13,23 @@ pub const CSS_THEME: &str = r#"
 
 window.hyprdrop-overlay {
     background-color: transparent;
+}
+
+window.hyprdrop-hotspot {
+    background-color: transparent;
+}
+
+.hyprdrop-hotspot-bar {
+    background-color: rgba(33, 33, 36, 0.45);
+    border-left: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 4px 0 0 4px;
+    transition: all 150ms ease-out;
+}
+
+.hyprdrop-hotspot-bar:hover,
+.hyprdrop-hotspot-bar.active {
+    background-color: #FF5722;
+    box-shadow: 0 0 14px rgba(255, 87, 34, 0.6);
 }
 
 .hyprdrop-surface {

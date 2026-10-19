@@ -16,15 +16,18 @@ impl DropShelf {
         savings_badge: Option<String>,
         on_chain: impl Fn(PathBuf) + 'static,
     ) {
-        let app = gtk4::Application::default();
-        let window = gtk4::ApplicationWindow::builder()
-            .application(&app)
+        let active_app = gio::Application::default().and_then(|a| a.downcast::<gtk4::Application>().ok());
+        let mut builder = gtk4::ApplicationWindow::builder()
             .title("Hyprdrop — Drop Shelf")
             .default_width(320)
             .default_height(96)
             .resizable(false)
-            .decorated(false)
-            .build();
+            .decorated(false);
+
+        if let Some(ref app) = active_app {
+            builder = builder.application(app);
+        }
+        let window = builder.build();
 
         window.add_css_class("hyprdrop-surface");
 

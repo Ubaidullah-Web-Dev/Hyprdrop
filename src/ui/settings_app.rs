@@ -263,7 +263,7 @@ fn build_preferences_tab() -> gtk4::Box {
     box_view.append(&hypr_section);
 
     // General Preferences Card
-    let pref_section = gtk4::Box::new(gtk4::Orientation::Vertical, 10);
+    let pref_section = gtk4::Box::new(gtk4::Orientation::Vertical, 12);
     pref_section.add_css_class("hyprdrop-card");
 
     let p_title = gtk4::Label::new(Some("General Preferences"));
@@ -272,6 +272,24 @@ fn build_preferences_tab() -> gtk4::Box {
     pref_section.append(&p_title);
 
     let cfg = ConfigManager::load_config();
+
+    // Output Naming Pattern
+    let name_box = gtk4::Box::new(gtk4::Orientation::Vertical, 4);
+    let name_lbl = gtk4::Label::new(Some("Output Naming Pattern:"));
+    name_lbl.add_css_class("hyprdrop-subtitle");
+    name_lbl.set_halign(gtk4::Align::Start);
+    name_box.append(&name_lbl);
+
+    let name_entry = gtk4::Entry::new();
+    name_entry.set_text(&cfg.naming_pattern);
+    name_entry.set_placeholder_text(Some("{stem} ({counter}).{ext}"));
+    name_box.append(&name_entry);
+
+    let name_hint = gtk4::Label::new(Some("Supported variables: {stem}, {counter}, {ext}"));
+    name_hint.add_css_class("hyprdrop-subtitle");
+    name_hint.set_halign(gtk4::Align::Start);
+    name_box.append(&name_hint);
+    pref_section.append(&name_box);
 
     // JPEG Quality Slider
     let jq_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 12);
@@ -285,18 +303,64 @@ fn build_preferences_tab() -> gtk4::Box {
     jq_box.append(&jq_scale);
     pref_section.append(&jq_box);
 
+    // Drop Shelf Timeout
+    let ds_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 12);
+    let ds_lbl = gtk4::Label::new(Some("Drop Shelf Timeout (seconds):"));
+    ds_lbl.add_css_class("hyprdrop-subtitle");
+    ds_box.append(&ds_lbl);
+
+    let ds_scale = gtk4::Scale::with_range(gtk4::Orientation::Horizontal, 5.0, 120.0, 5.0);
+    ds_scale.set_value(cfg.drop_shelf_timeout_secs as f64);
+    ds_scale.set_hexpand(true);
+    ds_box.append(&ds_scale);
+    pref_section.append(&ds_box);
+
+    // Show Drop Shelf Switch
+    let sw_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 12);
+    let sw_lbl = gtk4::Label::new(Some("Show Drop Shelf on Completion:"));
+    sw_lbl.add_css_class("hyprdrop-subtitle");
+    sw_box.append(&sw_lbl);
+
+    let sw_widget = gtk4::Switch::new();
+    sw_widget.set_active(cfg.show_drop_shelf);
+    sw_widget.set_halign(gtk4::Align::End);
+    sw_widget.set_hexpand(true);
+    sw_box.append(&sw_widget);
+    pref_section.append(&sw_box);
+
+    // Save status feedback label
+    let save_status = gtk4::Label::new(None);
+    save_status.add_css_class("hyprdrop-subtitle");
+    save_status.set_halign(gtk4::Align::Start);
+
     // Save button
     let save_pref_btn = gtk4::Button::with_label("Save Preferences");
     save_pref_btn.add_css_class("hyprdrop-secondary");
     save_pref_btn.set_halign(gtk4::Align::Start);
 
     let jq_scale_clone = jq_scale.clone();
+    let ds_scale_clone = ds_scale.clone();
+    let sw_clone = sw_widget.clone();
+    let name_entry_clone = name_entry.clone();
+    let save_status_clone = save_status.clone();
+
     save_pref_btn.connect_clicked(move |_| {
         let mut c = ConfigManager::load_config();
+        let pattern_text = name_entry_clone.text().to_string();
+        if !pattern_text.trim().is_empty() {
+            c.naming_pattern = pattern_text;
+        }
         c.jpeg_quality = jq_scale_clone.value().round() as u8;
-        let _ = ConfigManager::save_config(&c);
+        c.drop_shelf_timeout_secs = ds_scale_clone.value().round() as u32;
+        c.show_drop_shelf = sw_clone.is_active();
+
+        match ConfigManager::save_config(&c) {
+            Ok(_) => save_status_clone.set_text("Preferences saved successfully!"),
+            Err(e) => save_status_clone.set_text(&format!("Error saving preferences: {:?}", e)),
+        }
     });
     pref_section.append(&save_pref_btn);
+    pref_section.append(&save_status);
 
     box_view.append(&pref_section);
     box_view

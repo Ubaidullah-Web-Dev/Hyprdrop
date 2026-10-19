@@ -62,9 +62,15 @@ pub fn hit_test(
 
 pub struct RadialState {
     pub mode: RadialMode,
-    pub current_file: Option<PathBuf>,
+    pub current_files: Vec<PathBuf>,
     pub file_category: FileCategory,
     pub hovered_zone: HitZone,
+}
+
+impl RadialState {
+    pub fn current_file(&self) -> Option<&PathBuf> {
+        self.current_files.first()
+    }
 }
 
 pub struct RadialMenu {
@@ -74,14 +80,19 @@ pub struct RadialMenu {
 
 impl RadialMenu {
     pub fn new(initial_file: Option<PathBuf>) -> Self {
-        let category = match &initial_file {
+        let files = initial_file.map(|f| vec![f]).unwrap_or_default();
+        Self::new_with_files(files)
+    }
+
+    pub fn new_with_files(initial_files: Vec<PathBuf>) -> Self {
+        let category = match initial_files.first() {
             Some(path) => FileCategory::from_path(path),
             None => FileCategory::Image,
         };
 
         let state = Rc::new(RefCell::new(RadialState {
             mode: RadialMode::FormatConversion,
-            current_file: initial_file,
+            current_files: initial_files,
             file_category: category,
             hovered_zone: HitZone::Outside,
         }));
@@ -156,9 +167,15 @@ impl RadialMenu {
     }
 
     pub fn set_file(&self, file_path: PathBuf) {
+        self.set_files(vec![file_path]);
+    }
+
+    pub fn set_files(&self, files: Vec<PathBuf>) {
         let mut s = self.state.borrow_mut();
-        s.file_category = FileCategory::from_path(&file_path);
-        s.current_file = Some(file_path);
+        if let Some(first) = files.first() {
+            s.file_category = FileCategory::from_path(first);
+        }
+        s.current_files = files;
         drop(s);
         self.widget.queue_draw();
     }
@@ -196,7 +213,7 @@ impl RadialMenu {
         let _ = cr.stroke();
 
         // Render Slices
-        for i in 0..slice_count {
+        for (i, &slice_label) in slices.iter().enumerate() {
             let start_angle = -PI / 2.0 + (i as f64) * slice_angle;
             let end_angle = start_angle + slice_angle;
 
@@ -235,7 +252,7 @@ impl RadialMenu {
             let label_y = cy + mid_r * mid_angle.sin();
 
             cr.select_font_face("Sans", FontSlant::Normal, FontWeight::Bold);
-            let font_size = if slices[i].len() > 8 { 10.0 } else { 12.0 };
+            let font_size = if slice_label.len() > 8 { 10.0 } else { 12.0 };
             cr.set_font_size(font_size);
 
             if is_hovered {
@@ -244,12 +261,12 @@ impl RadialMenu {
                 cr.set_source_rgb(0.95, 0.95, 0.96);
             }
 
-            if let Ok(extents) = cr.text_extents(slices[i]) {
+            if let Ok(extents) = cr.text_extents(slice_label) {
                 cr.move_to(
                     label_x - extents.width() / 2.0 - extents.x_bearing(),
                     label_y - extents.height() / 2.0 - extents.y_bearing(),
                 );
-                let _ = cr.show_text(slices[i]);
+                let _ = cr.show_text(slice_label);
             }
         }
 
@@ -309,13 +326,25 @@ impl RadialMenu {
                 }
             }
             _ => {
-                // Default center: File size or Drop prompt
-                let main_text = match &state.current_file {
-                    Some(path) => match std::fs::metadata(path) {
-                        Ok(meta) => format_file_size(meta.len()),
-                        Err(_) => "FILE".to_string(),
-                    },
-                    None => "HYPRDROP".to_string(),
+                // Default center: File size, Multiple files count, or Drop prompt
+                let (main_text, sub_override) = match state.current_files.len() {
+                    0 => ("HYPRDROP".to_string(), None),
+                    1 => {
+                        let path = &state.current_files[0];
+                        let sz = match std::fs::metadata(path) {
+                            Ok(meta) => format_file_size(meta.len()),
+                            Err(_) => "FILE".to_string(),
+                        };
+                        (sz, None)
+                    }
+                    n => {
+                        let total_bytes: u64 = state
+                            .current_files
+                            .iter()
+                            .filter_map(|p| std::fs::metadata(p).ok().map(|m| m.len()))
+                            .sum();
+                        (format!("{} FILES", n), Some(format_file_size(total_bytes)))
+                    }
                 };
 
                 cr.select_font_face("Monospace", FontSlant::Normal, FontWeight::Bold);
@@ -330,21 +359,22 @@ impl RadialMenu {
                     let _ = cr.show_text(&main_text);
                 }
 
-                // Subtitle: Current Mode ("FORMATS" or "ACTIONS")
+                // Subtitle: Mode ("FORMATS" or "ACTIONS") or total size
                 let mode_str = match state.mode {
                     RadialMode::FormatConversion => "FORMATS",
                     RadialMode::QuickActions => "ACTIONS",
                 };
+                let sub_display = sub_override.unwrap_or_else(|| mode_str.to_string());
                 cr.select_font_face("Sans", FontSlant::Normal, FontWeight::Bold);
                 cr.set_font_size(9.0);
                 cr.set_source_rgba(1.0, 0.34, 0.13, 0.85);
 
-                if let Ok(ext) = cr.text_extents(mode_str) {
+                if let Ok(ext) = cr.text_extents(&sub_display) {
                     cr.move_to(
                         cx - ext.width() / 2.0 - ext.x_bearing(),
                         cy + 12.0 - ext.y_bearing(),
                     );
-                    let _ = cr.show_text(mode_str);
+                    let _ = cr.show_text(&sub_display);
                 }
             }
         }

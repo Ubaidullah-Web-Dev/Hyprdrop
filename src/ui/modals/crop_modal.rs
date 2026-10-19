@@ -48,6 +48,7 @@ enum DragHandle {
 struct CropState {
     source_path: PathBuf,
     image: DynamicImage,
+    bgra_cache: Vec<u8>,
     preset: AspectPreset,
     crop_x: f64,
     crop_y: f64,
@@ -82,9 +83,19 @@ pub fn open_crop_modal(
     let init_x = (orig_w - init_w) / 2.0;
     let init_y = (orig_h - init_h) / 2.0;
 
+    let rgba = img.to_rgba8();
+    let mut bgra_cache = Vec::with_capacity((orig_w * orig_h * 4.0) as usize);
+    for p in rgba.pixels() {
+        bgra_cache.push(p[2]);
+        bgra_cache.push(p[1]);
+        bgra_cache.push(p[0]);
+        bgra_cache.push(p[3]);
+    }
+
     let state = Rc::new(RefCell::new(CropState {
         source_path: image_path.to_path_buf(),
         image: img,
+        bgra_cache,
         preset: AspectPreset::Free,
         crop_x: init_x,
         crop_y: init_y,
@@ -149,6 +160,38 @@ pub fn open_crop_modal(
         pill_buttons.push((btn, preset_val));
     }
     header_box.append(&preset_box);
+
+    // Live editable pixel dimensions (Width x Height)
+    let dim_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 6);
+    dim_box.set_valign(gtk4::Align::Center);
+
+    let w_lbl = gtk4::Label::new(Some("W:"));
+    w_lbl.add_css_class("hyprdrop-subtitle");
+    dim_box.append(&w_lbl);
+
+    let w_spin = gtk4::SpinButton::with_range(20.0, orig_w, 1.0);
+    w_spin.set_value(init_w.round());
+    w_spin.add_css_class("hyprdrop-mono");
+    dim_box.append(&w_spin);
+
+    let x_lbl = gtk4::Label::new(Some("×"));
+    x_lbl.add_css_class("hyprdrop-subtitle");
+    dim_box.append(&x_lbl);
+
+    let h_lbl = gtk4::Label::new(Some("H:"));
+    h_lbl.add_css_class("hyprdrop-subtitle");
+    dim_box.append(&h_lbl);
+
+    let h_spin = gtk4::SpinButton::with_range(20.0, orig_h, 1.0);
+    h_spin.set_value(init_h.round());
+    h_spin.add_css_class("hyprdrop-mono");
+    dim_box.append(&h_spin);
+
+    let px_lbl = gtk4::Label::new(Some("px"));
+    px_lbl.add_css_class("hyprdrop-subtitle");
+    dim_box.append(&px_lbl);
+
+    header_box.append(&dim_box);
     root_box.append(&header_box);
 
     // Preview Drawing Area
@@ -207,6 +250,8 @@ pub fn open_crop_modal(
     let motion = gtk4::EventControllerMotion::new();
     let state_motion = state.clone();
     let canvas_motion = canvas.clone();
+    let w_spin_motion = w_spin.clone();
+    let h_spin_motion = h_spin.clone();
     motion.connect_motion(move |_, x, y| {
         let mut s = state_motion.borrow_mut();
         if !s.is_dragging || s.active_handle == DragHandle::None {
@@ -228,10 +273,57 @@ pub fn open_crop_modal(
         let img_h = s.image.height() as f64;
 
         update_crop_rect(&mut s, dx, dy, img_w, img_h);
+        let cur_w = s.crop_w.round();
+        let cur_h = s.crop_h.round();
         drop(s);
+        if (w_spin_motion.value() - cur_w).abs() >= 1.0 {
+            w_spin_motion.set_value(cur_w);
+        }
+        if (h_spin_motion.value() - cur_h).abs() >= 1.0 {
+            h_spin_motion.set_value(cur_h);
+        }
         canvas_motion.queue_draw();
     });
     canvas.add_controller(motion);
+
+    // Spin Button Listeners for live user pixel inputs
+    let state_w = state.clone();
+    let canvas_w = canvas.clone();
+    let h_spin_w = h_spin.clone();
+    w_spin.connect_value_changed(move |spin| {
+        let mut s = state_w.borrow_mut();
+        if s.is_dragging {
+            return;
+        }
+        let max_w = s.image.width() as f64 - s.crop_x;
+        s.crop_w = spin.value().clamp(20.0, max_w);
+        if let Some(ratio) = s.preset.ratio() {
+            let max_h = s.image.height() as f64 - s.crop_y;
+            s.crop_h = (s.crop_w / ratio).clamp(20.0, max_h);
+            h_spin_w.set_value(s.crop_h.round());
+        }
+        drop(s);
+        canvas_w.queue_draw();
+    });
+
+    let state_h = state.clone();
+    let canvas_h = canvas.clone();
+    let w_spin_h = w_spin.clone();
+    h_spin.connect_value_changed(move |spin| {
+        let mut s = state_h.borrow_mut();
+        if s.is_dragging {
+            return;
+        }
+        let max_h = s.image.height() as f64 - s.crop_y;
+        s.crop_h = spin.value().clamp(20.0, max_h);
+        if let Some(ratio) = s.preset.ratio() {
+            let max_w = s.image.width() as f64 - s.crop_x;
+            s.crop_w = (s.crop_h * ratio).clamp(20.0, max_w);
+            w_spin_h.set_value(s.crop_w.round());
+        }
+        drop(s);
+        canvas_h.queue_draw();
+    });
 
     root_box.append(&canvas);
 
@@ -241,6 +333,7 @@ pub fn open_crop_modal(
         let canvas_p = canvas.clone();
         let all_pills = pill_buttons.clone();
         let b = btn.clone();
+        let h_spin_p = h_spin.clone();
         btn.connect_clicked(move |_| {
             for (p_btn, _) in &all_pills {
                 p_btn.remove_css_class("active");
@@ -254,6 +347,7 @@ pub fn open_crop_modal(
                 let max_h = s.image.height() as f64 - s.crop_y;
                 let target_h = (s.crop_w / ratio).min(max_h);
                 s.crop_h = target_h.max(20.0);
+                h_spin_p.set_value(s.crop_h.round());
             }
             drop(s);
             canvas_p.queue_draw();
@@ -271,6 +365,8 @@ pub fn open_crop_modal(
     reset_btn.add_css_class("hyprdrop-secondary");
     let state_reset = state.clone();
     let canvas_reset = canvas.clone();
+    let w_spin_reset = w_spin.clone();
+    let h_spin_reset = h_spin.clone();
     reset_btn.connect_clicked(move |_| {
         let mut s = state_reset.borrow_mut();
         let (orig_w, orig_h) = (s.image.width() as f64, s.image.height() as f64);
@@ -278,6 +374,8 @@ pub fn open_crop_modal(
         s.crop_h = orig_h * 0.8;
         s.crop_x = (orig_w - s.crop_w) / 2.0;
         s.crop_y = (orig_h - s.crop_h) / 2.0;
+        w_spin_reset.set_value(s.crop_w.round());
+        h_spin_reset.set_value(s.crop_h.round());
         drop(s);
         canvas_reset.queue_draw();
     });
@@ -328,7 +426,7 @@ pub fn open_crop_modal(
 fn get_canvas_transform(canvas_w: f64, canvas_h: f64, img_w: f64, img_h: f64) -> (f64, f64, f64) {
     let scale_x = (canvas_w - 40.0) / img_w;
     let scale_y = (canvas_h - 40.0) / img_h;
-    let scale = scale_x.min(scale_y).min(1.0).max(0.01);
+    let scale = scale_x.min(scale_y).clamp(0.01, 1.0);
     let view_w = img_w * scale;
     let view_h = img_h * scale;
     let view_x = (canvas_w - view_w) / 2.0;
@@ -428,22 +526,15 @@ fn draw_crop_canvas(cr: &Context, canvas_w: f64, canvas_h: f64, state: &CropStat
     cr.set_source_rgb(0.05, 0.05, 0.06);
     let _ = cr.paint();
 
-    // Draw scaled image
-    let rgba = state.image.to_rgba8();
-    let mut bgra = Vec::with_capacity((img_w * img_h * 4.0) as usize);
-    for p in rgba.pixels() {
-        bgra.push(p[2]);
-        bgra.push(p[1]);
-        bgra.push(p[0]);
-        bgra.push(p[3]);
-    }
+    // Draw scaled image using cached BGRA
+    let bgra = state.bgra_cache.clone();
 
     if let Ok(surface) = cairo::ImageSurface::create_for_data(
         bgra,
         cairo::Format::ARgb32,
         img_w as i32,
         img_h as i32,
-        cairo::Format::ARgb32.stride_for_width(img_w as u32).unwrap_or(0),
+        cairo::Format::ARgb32.stride_for_width(img_w as u32).unwrap_or(img_w as i32 * 4),
     ) {
         cr.save().ok();
         cr.translate(vx, vy);

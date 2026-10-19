@@ -31,6 +31,8 @@ pub fn open_quick_edit_modal(
         }
     };
 
+    let (init_w, init_h) = (img.width(), img.height());
+
     let state = Rc::new(RefCell::new(EditState {
         source_path: image_path.to_path_buf(),
         original_image: img.clone(),
@@ -144,6 +146,44 @@ pub fn open_quick_edit_modal(
     t_row2.append(&flipv_btn);
     sidebar.append(&t_row2);
 
+    // Quick Resize Section
+    let resize_header = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
+    let resize_lbl = gtk4::Label::new(Some("Quick Resize"));
+    resize_lbl.add_css_class("hyprdrop-subtitle");
+    let dim_lbl = gtk4::Label::new(Some(&format!("{}×{} px", init_w, init_h)));
+    dim_lbl.add_css_class("hyprdrop-mono");
+    dim_lbl.set_hexpand(true);
+    dim_lbl.set_halign(gtk4::Align::End);
+    resize_header.append(&resize_lbl);
+    resize_header.append(&dim_lbl);
+    sidebar.append(&resize_header);
+
+    let resize_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 4);
+    let scales = [
+        ("25%", 0.25f64),
+        ("50%", 0.50f64),
+        ("75%", 0.75f64),
+        ("150%", 1.50f64),
+        ("200%", 2.00f64),
+    ];
+    for (label, factor) in scales {
+        let btn = gtk4::Button::with_label(label);
+        btn.add_css_class("hyprdrop-pill");
+        let state_res = state.clone();
+        let canvas_res = canvas.clone();
+        let dim_lbl_res = dim_lbl.clone();
+        btn.connect_clicked(move |_| {
+            let mut s = state_res.borrow_mut();
+            let new_w = ((s.current_image.width() as f64) * factor).round().max(16.0) as u32;
+            let new_h = ((s.current_image.height() as f64) * factor).round().max(16.0) as u32;
+            s.current_image = s.current_image.resize(new_w, new_h, image::imageops::FilterType::Lanczos3);
+            dim_lbl_res.set_text(&format!("{}×{} px", s.current_image.width(), s.current_image.height()));
+            drop(s);
+            canvas_res.queue_draw();
+        });
+        resize_box.append(&btn);
+    }
+    sidebar.append(&resize_box);
     sidebar.append(&gtk4::Separator::new(gtk4::Orientation::Horizontal));
 
     // Auto-Trim Transparent
@@ -151,10 +191,12 @@ pub fn open_quick_edit_modal(
     trim_btn.add_css_class("hyprdrop-pill");
     let state_trim = state.clone();
     let canvas_trim = canvas.clone();
+    let dim_lbl_trim = dim_lbl.clone();
     trim_btn.connect_clicked(move |_| {
         let mut s = state_trim.borrow_mut();
         let trimmed = auto_trim_transparent(&s.current_image.to_rgba8());
         s.current_image = DynamicImage::ImageRgba8(trimmed);
+        dim_lbl_trim.set_text(&format!("{}×{} px", s.current_image.width(), s.current_image.height()));
         drop(s);
         canvas_trim.queue_draw();
     });
@@ -217,6 +259,7 @@ pub fn open_quick_edit_modal(
     let canvas_reset = canvas.clone();
     let b_scale_reset = b_scale.clone();
     let c_scale_reset = c_scale.clone();
+    let dim_lbl_reset = dim_lbl.clone();
     reset_btn.connect_clicked(move |_| {
         let mut s = state_reset.borrow_mut();
         s.current_image = s.original_image.clone();
@@ -224,6 +267,7 @@ pub fn open_quick_edit_modal(
         s.contrast = 0.0;
         b_scale_reset.set_value(0.0);
         c_scale_reset.set_value(0.0);
+        dim_lbl_reset.set_text(&format!("{}×{} px", s.original_image.width(), s.original_image.height()));
         drop(s);
         canvas_reset.queue_draw();
     });
@@ -279,7 +323,7 @@ fn draw_edit_canvas(cr: &Context, cw: f64, ch: f64, state: &EditState) {
 
     let sx = (cw - 32.0) / iw;
     let sy = (ch - 32.0) / ih;
-    let scale = sx.min(sy).min(1.0).max(0.01);
+    let scale = sx.min(sy).clamp(0.01, 1.0);
     let vx = (cw - iw * scale) / 2.0;
     let vy = (ch - ih * scale) / 2.0;
 
@@ -297,7 +341,7 @@ fn draw_edit_canvas(cr: &Context, cw: f64, ch: f64, state: &EditState) {
         cairo::Format::ARgb32,
         iw as i32,
         ih as i32,
-        cairo::Format::ARgb32.stride_for_width(iw as u32).unwrap_or(0),
+        cairo::Format::ARgb32.stride_for_width(iw as u32).unwrap_or(iw as i32 * 4),
     ) {
         cr.save().ok();
         cr.translate(vx, vy);

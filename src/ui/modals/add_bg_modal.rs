@@ -115,11 +115,41 @@ pub fn open_add_bg_modal(
     }
     sidebar.append(&palette_flow);
 
+    // Custom Color Picker
+    let custom_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
+    custom_box.set_margin_top(4);
+
+    let custom_lbl = gtk4::Label::new(Some("Custom Color:"));
+    custom_lbl.add_css_class("hyprdrop-subtitle");
+    custom_box.append(&custom_lbl);
+
+    let dialog = gtk4::ColorDialog::builder()
+        .title("Custom Studio Backdrop")
+        .build();
+    let color_btn = gtk4::ColorDialogButton::new(Some(dialog));
+    color_btn.set_rgba(&gtk4::gdk::RGBA::new(0.086, 0.086, 0.102, 1.0));
+
+    let state_custom = state.clone();
+    let canvas_custom = canvas.clone();
+    color_btn.connect_rgba_notify(move |btn| {
+        let rgba = btn.rgba();
+        let r = (rgba.red() * 255.0).round() as u8;
+        let g = (rgba.green() * 255.0).round() as u8;
+        let b = (rgba.blue() * 255.0).round() as u8;
+        let r2 = ((rgba.red() * 1.25).min(1.0) * 255.0).round() as u8;
+        let g2 = ((rgba.green() * 1.25).min(1.0) * 255.0).round() as u8;
+        let b2 = ((rgba.blue() * 1.25).min(1.0) * 255.0).round() as u8;
+        state_custom.borrow_mut().preset = StudioBackgroundPreset::Custom(r, g, b, r2, g2, b2);
+        canvas_custom.queue_draw();
+    });
+    custom_box.append(&color_btn);
+    sidebar.append(&custom_box);
+
     // Separator
     sidebar.append(&gtk4::Separator::new(gtk4::Orientation::Horizontal));
 
     // Sliders
-    // 1. Padding (0 - 300 px)
+    // 1. Padding (0 - 600 px)
     let pad_header = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
     let pad_title = gtk4::Label::new(Some("Padding"));
     pad_title.add_css_class("hyprdrop-subtitle");
@@ -131,7 +161,7 @@ pub fn open_add_bg_modal(
     pad_header.append(&pad_val_lbl);
     sidebar.append(&pad_header);
 
-    let pad_scale = gtk4::Scale::with_range(gtk4::Orientation::Horizontal, 0.0, 300.0, 4.0);
+    let pad_scale = gtk4::Scale::with_range(gtk4::Orientation::Horizontal, 0.0, 600.0, 4.0);
     pad_scale.set_value(64.0);
     let state_pad = state.clone();
     let canvas_pad = canvas.clone();
@@ -242,6 +272,37 @@ pub fn open_add_bg_modal(
     sidebar.append(&v_spacer);
 
     let btn_row = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
+
+    let reset_btn = gtk4::Button::with_label("Reset");
+    reset_btn.add_css_class("hyprdrop-secondary");
+    let state_reset = state.clone();
+    let canvas_reset = canvas.clone();
+    let pad_scale_reset = pad_scale.clone();
+    let cr_scale_reset = cr_scale.clone();
+    let sh_scale_reset = sh_scale.clone();
+    let all_r_reset = ratio_pills.clone();
+    reset_btn.connect_clicked(move |_| {
+        let mut s = state_reset.borrow_mut();
+        s.preset = StudioBackgroundPreset::DeepStudio;
+        s.padding = 64;
+        s.corner_radius = 24.0;
+        s.shadow_intensity = 0.65;
+        s.aspect_ratio = TargetAspectRatio::Auto;
+        pad_scale_reset.set_value(64.0);
+        cr_scale_reset.set_value(24.0);
+        sh_scale_reset.set_value(0.65);
+        for (p, r) in &all_r_reset {
+            if *r == TargetAspectRatio::Auto {
+                p.add_css_class("active");
+            } else {
+                p.remove_css_class("active");
+            }
+        }
+        drop(s);
+        canvas_reset.queue_draw();
+    });
+    btn_row.append(&reset_btn);
+
     let cancel_btn = gtk4::Button::with_label("Cancel");
     cancel_btn.add_css_class("hyprdrop-secondary");
     cancel_btn.set_hexpand(true);
@@ -319,7 +380,7 @@ fn draw_preview_backdrop(cr: &Context, canvas_w: f64, canvas_h: f64, state: &Add
 
     let scale_x = (canvas_w - 48.0) / rw;
     let scale_y = (canvas_h - 48.0) / rh;
-    let fit_scale = scale_x.min(scale_y).min(1.0).max(0.01);
+    let fit_scale = scale_x.min(scale_y).clamp(0.01, 1.0);
 
     let final_w = rw * fit_scale;
     let final_h = rh * fit_scale;
@@ -339,7 +400,7 @@ fn draw_preview_backdrop(cr: &Context, canvas_w: f64, canvas_h: f64, state: &Add
         cairo::Format::ARgb32,
         rw as i32,
         rh as i32,
-        cairo::Format::ARgb32.stride_for_width(rw as u32).unwrap_or(0),
+        cairo::Format::ARgb32.stride_for_width(rw as u32).unwrap_or(rw as i32 * 4),
     ) {
         cr.save().ok();
         cr.translate(vx, vy);

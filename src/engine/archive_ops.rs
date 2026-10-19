@@ -21,11 +21,10 @@ pub fn extract_archive(archive_path: &Path, destination_dir: &Path) -> Result<Pa
             if file.is_dir() {
                 fs::create_dir_all(&outpath)?;
             } else {
-                if let Some(p) = outpath.parent() {
-                    if !p.exists() {
+                if let Some(p) = outpath.parent()
+                    && !p.exists() {
                         fs::create_dir_all(p)?;
                     }
-                }
                 let mut outfile = File::create(&outpath)?;
                 std::io::copy(&mut file, &mut outfile)?;
             }

@@ -86,3 +86,50 @@ fn test_suffixed_output_path() {
     let out_bg = get_suffixed_output_path(&src, "With Background", Some("png"));
     assert_eq!(out_bg, dir.path().join("photo With Background.png"));
 }
+
+#[test]
+fn test_split_stem_and_ext_compound() {
+    use hyprdrop::engine::naming::split_stem_and_ext;
+
+    let (stem, ext) = split_stem_and_ext("archive.tar.gz");
+    assert_eq!(stem, "archive");
+    assert_eq!(ext, Some("tar.gz"));
+
+    let (stem, ext) = split_stem_and_ext("backup.tar.zst");
+    assert_eq!(stem, "backup");
+    assert_eq!(ext, Some("tar.zst"));
+
+    let (stem, ext) = split_stem_and_ext("document.pdf");
+    assert_eq!(stem, "document");
+    assert_eq!(ext, Some("pdf"));
+
+    let (stem, ext) = split_stem_and_ext("Makefile");
+    assert_eq!(stem, "Makefile");
+    assert_eq!(ext, None);
+}
+
+#[test]
+fn test_strip_existing_counter_preserves_years() {
+    use hyprdrop::engine::naming::strip_existing_counter;
+
+    // Years (1900..=2099) should be preserved
+    assert_eq!(strip_existing_counter("Annual Report (2024)"), "Annual Report (2024)");
+    assert_eq!(strip_existing_counter("Photos (1998)"), "Photos (1998)");
+
+    // Standard collision counters should be stripped
+    assert_eq!(strip_existing_counter("Annual Report (1)"), "Annual Report");
+    assert_eq!(strip_existing_counter("Annual Report (2)"), "Annual Report");
+    assert_eq!(strip_existing_counter("Annual Report (99)"), "Annual Report");
+}
+
+#[test]
+fn test_collision_safe_compound_and_year() {
+    let dir = tempdir().expect("Failed to create tempdir");
+    let target = dir.path().join("financial_report (2024).tar.gz");
+    File::create(&target).expect("Failed to create file");
+
+    let safe = get_collision_safe_path(&target);
+    // Should preserve year and insert (2) before compound extension .tar.gz
+    assert_eq!(safe, dir.path().join("financial_report (2024) (2).tar.gz"));
+}
+

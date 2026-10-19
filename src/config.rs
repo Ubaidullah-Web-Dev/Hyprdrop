@@ -66,11 +66,10 @@ impl ConfigManager {
 
     pub fn load_config() -> AppConfig {
         let path = Self::config_path();
-        if let Ok(content) = fs::read_to_string(&path) {
-            if let Ok(cfg) = serde_json::from_str(&content) {
+        if let Ok(content) = fs::read_to_string(&path)
+            && let Ok(cfg) = serde_json::from_str(&content) {
                 return cfg;
             }
-        }
         AppConfig::default()
     }
 
@@ -84,11 +83,10 @@ impl ConfigManager {
 
     pub fn load_history() -> Vec<HistoryRecord> {
         let path = Self::history_path();
-        if let Ok(content) = fs::read_to_string(&path) {
-            if let Ok(records) = serde_json::from_str(&content) {
+        if let Ok(content) = fs::read_to_string(&path)
+            && let Ok(records) = serde_json::from_str(&content) {
                 return records;
             }
-        }
         Vec::new()
     }
 

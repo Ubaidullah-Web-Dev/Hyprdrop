@@ -179,3 +179,28 @@ fn test_image_compression() {
     assert!(res.output_path.exists());
     assert!(res.compressed_bytes > 0);
 }
+
+#[test]
+fn test_execute_conversion_batch_parallel() {
+    use hyprdrop::engine::execute_conversion_batch;
+
+    let dir = tempdir().expect("Failed to create tempdir");
+    let mut sources = Vec::new();
+
+    for i in 0..4 {
+        let p = dir.path().join(format!("batch_item_{}.png", i));
+        let img = create_test_image(120, 80);
+        img.save(&p).expect("Failed to save test image");
+        sources.push(p);
+    }
+
+    let results = execute_conversion_batch(&sources, "jpg");
+    assert_eq!(results.len(), 4);
+
+    for (i, res) in results.into_iter().enumerate() {
+        let out_path = res.unwrap_or_else(|e| panic!("Batch item {} failed: {:?}", i, e));
+        assert!(out_path.exists());
+        assert_eq!(out_path.extension().and_then(|e| e.to_str()), Some("jpg"));
+    }
+}
+

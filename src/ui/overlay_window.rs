@@ -1,12 +1,15 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::rc::Rc;
 use gtk4::gdk;
+use gtk4::gio;
 use gtk4::glib;
 use gtk4::prelude::*;
 use crate::config::ConfigManager;
 use crate::engine::compress::compress_file;
 use crate::engine::ocr_clipboard::{copy_image_to_clipboard, ocr_image_and_copy};
-use crate::engine::{execute_conversion, get_conversion_slices, get_quick_action_slices};
+use crate::engine::{
+    execute_conversion_batch, get_conversion_slices, get_quick_action_slices,
+};
 use crate::hyprland::layer_shell::configure_layer_shell_window;
 use crate::ui::drop_shelf::DropShelf;
 use crate::ui::modals::{
@@ -18,7 +21,39 @@ use crate::ui::radial_menu::{HitZone, RADIAL_SIZE, RadialMenu, RadialMode};
 pub struct OverlayWindow;
 
 impl OverlayWindow {
+    /// Checks whether an overlay window is currently open.
+    pub fn is_open(app: &gtk4::Application) -> bool {
+        app.windows().iter().any(|w| {
+            w.has_css_class("hyprdrop-overlay") || w.title().as_deref() == Some("Hyprdrop Overlay")
+        })
+    }
+
+    /// Closes all active overlay windows.
+    pub fn close_all(app: &gtk4::Application) {
+        for w in app.windows() {
+            if w.has_css_class("hyprdrop-overlay") || w.title().as_deref() == Some("Hyprdrop Overlay") {
+                w.close();
+            }
+        }
+    }
+
+    /// Toggles the overlay window: if open, closes it; if closed, spawns it.
+    pub fn toggle(app: &gtk4::Application, preloaded_file: Option<PathBuf>) {
+        if Self::is_open(app) {
+            Self::close_all(app);
+        } else {
+            Self::spawn(app, preloaded_file);
+        }
+    }
+
+    /// Spawns the overlay window with an optional single preloaded file.
     pub fn spawn(app: &gtk4::Application, preloaded_file: Option<PathBuf>) {
+        let files = preloaded_file.map(|f| vec![f]).unwrap_or_default();
+        Self::spawn_with_files(app, files);
+    }
+
+    /// Spawns the overlay window with a list of preloaded files (multi-file drop support).
+    pub fn spawn_with_files(app: &gtk4::Application, preloaded_files: Vec<PathBuf>) {
         let window = gtk4::ApplicationWindow::builder()
             .application(app)
             .title("Hyprdrop Overlay")
@@ -31,7 +66,7 @@ impl OverlayWindow {
         window.add_css_class("hyprdrop-overlay");
         configure_layer_shell_window(&window, RADIAL_SIZE, RADIAL_SIZE, None);
 
-        let radial = Rc::new(RadialMenu::new(preloaded_file));
+        let radial = Rc::new(RadialMenu::new_with_files(preloaded_files));
 
         // Click Gesture on Radial Menu
         let click = gtk4::GestureClick::new();
@@ -63,15 +98,15 @@ impl OverlayWindow {
 
                     if idx < slices.len() {
                         let slice_name = slices[idx];
-                        let maybe_file = s.current_file.clone();
+                        let files = s.current_files.clone();
                         let current_mode = s.mode;
                         drop(s);
 
-                        if let Some(file_path) = maybe_file {
+                        if !files.is_empty() {
                             handle_slice_activation(
                                 &win_click,
                                 &app_click,
-                                &file_path,
+                                &files,
                                 slice_name,
                                 current_mode,
                             );
@@ -88,45 +123,48 @@ impl OverlayWindow {
         radial.widget.add_controller(click);
 
         // Drop Target for files dragged into the radial overlay
+        // Accepts gdk::FileList, gio::File, and text/uri-list strings
         let drop_target = gtk4::DropTarget::new(
-            gdk::FileList::static_type(),
+            glib::types::Type::INVALID,
             gdk::DragAction::COPY | gdk::DragAction::MOVE,
         );
+        drop_target.set_types(&[
+            gdk::FileList::static_type(),
+            gio::File::static_type(),
+            glib::types::Type::STRING,
+        ]);
 
         let radial_drop = radial.clone();
         let win_drop = window.clone();
         let app_drop = app.clone();
 
         drop_target.connect_drop(move |_, val, _, _| {
-            if let Ok(file_list) = val.get::<gdk::FileList>() {
-                let files = file_list.files();
-                if let Some(first_file) = files.first() {
-                    if let Some(path) = first_file.path() {
-                        let s = radial_drop.state.borrow();
-                        let slices = match s.mode {
-                            RadialMode::FormatConversion => get_conversion_slices(s.file_category),
-                            RadialMode::QuickActions => get_quick_action_slices(s.file_category),
-                        };
+            let paths = extract_paths_from_drop_value(val);
+            if paths.is_empty() {
+                return false;
+            }
 
-                        match s.hovered_zone {
-                            HitZone::Slice(idx) if idx < slices.len() => {
-                                let slice_name = slices[idx];
-                                let mode = s.mode;
-                                drop(s);
-                                handle_slice_activation(&win_drop, &app_drop, &path, slice_name, mode);
-                                return true;
-                            }
-                            _ => {
-                                drop(s);
-                                // Just load file into wheel
-                                radial_drop.set_file(path);
-                                return true;
-                            }
-                        }
-                    }
+            let s = radial_drop.state.borrow();
+            let slices = match s.mode {
+                RadialMode::FormatConversion => get_conversion_slices(s.file_category),
+                RadialMode::QuickActions => get_quick_action_slices(s.file_category),
+            };
+
+            match s.hovered_zone {
+                HitZone::Slice(idx) if idx < slices.len() => {
+                    let slice_name = slices[idx];
+                    let mode = s.mode;
+                    drop(s);
+                    handle_slice_activation(&win_drop, &app_drop, &paths, slice_name, mode);
+                    true
+                }
+                _ => {
+                    drop(s);
+                    // Load all dropped files into wheel
+                    radial_drop.set_files(paths);
+                    true
                 }
             }
-            false
         });
         window.add_controller(drop_target);
 
@@ -167,12 +205,12 @@ impl OverlayWindow {
 
                     if num < slices.len() {
                         let slice_name = slices[num];
-                        let maybe_file = s.current_file.clone();
+                        let files = s.current_files.clone();
                         let mode = s.mode;
                         drop(s);
 
-                        if let Some(file_path) = maybe_file {
-                            handle_slice_activation(&win_key, &app_key, &file_path, slice_name, mode);
+                        if !files.is_empty() {
+                            handle_slice_activation(&win_key, &app_key, &files, slice_name, mode);
                         }
                     }
                     glib::Propagation::Stop
@@ -187,105 +225,199 @@ impl OverlayWindow {
     }
 }
 
+/// Robustly extracts local filesystem paths from a GTK DropTarget value.
+/// Supports gdk::FileList, gio::File, and text/uri-list strings.
+pub fn extract_paths_from_drop_value(val: &glib::Value) -> Vec<PathBuf> {
+    let mut paths = Vec::new();
+
+    // 1. Check gdk::FileList
+    if let Ok(file_list) = val.get::<gdk::FileList>() {
+        for f in file_list.files() {
+            if let Some(p) = f.path()
+                && p.exists() {
+                    paths.push(p);
+                }
+        }
+        if !paths.is_empty() {
+            return paths;
+        }
+    }
+
+    // 2. Check gio::File
+    if let Ok(file) = val.get::<gio::File>()
+        && let Some(p) = file.path()
+            && p.exists() {
+                paths.push(p);
+                return paths;
+            }
+
+    // 3. Check String / GString (text/uri-list)
+    let text = if let Ok(s) = val.get::<glib::GString>() {
+        Some(s.to_string())
+    } else {
+        val.get::<String>().ok()
+    };
+
+    if let Some(text) = text {
+        for line in text.lines() {
+            let trimmed = line.trim();
+            if trimmed.is_empty() || trimmed.starts_with('#') {
+                continue;
+            }
+            if let Ok((p, _)) = glib::filename_from_uri(trimmed) {
+                if p.exists() {
+                    paths.push(p);
+                }
+            } else if let Some(stripped) = trimmed.strip_prefix("file://") {
+                let p = PathBuf::from(stripped);
+                if p.exists() {
+                    paths.push(p);
+                }
+            } else {
+                let p = PathBuf::from(trimmed);
+                if p.exists() {
+                    paths.push(p);
+                }
+            }
+        }
+    }
+
+    paths
+}
+
 fn handle_slice_activation(
     window: &gtk4::ApplicationWindow,
     _app: &gtk4::Application,
-    source_file: &Path,
+    source_files: &[PathBuf],
     slice_name: &str,
     mode: RadialMode,
 ) {
-    let source_path = source_file.to_path_buf();
+    if source_files.is_empty() {
+        return;
+    }
 
     match mode {
         RadialMode::FormatConversion => {
             window.close();
-            let src = source_path.clone();
+            let src_files = source_files.to_vec();
             let slice = slice_name.to_string();
 
-            // Background thread conversion
+            // Background parallel conversion using Rayon
             std::thread::spawn(move || {
-                match execute_conversion(&src, &slice) {
-                    Ok(out_path) => {
-                        let _ = ConfigManager::append_history(
-                            &format!("CONVERT: {}", slice),
-                            &src,
-                            &out_path,
-                            None,
-                        );
-                        glib::idle_add_once(move || {
-                            DropShelf::spawn(out_path, None, |chained_file| {
-                                let app = gtk4::Application::default();
+                let results = execute_conversion_batch(&src_files, &slice);
+                let mut successful_outputs = Vec::new();
+
+                for (src, res) in src_files.iter().zip(results) {
+                    match res {
+                        Ok(out_path) => {
+                            let _ = ConfigManager::append_history(
+                                &format!("CONVERT: {}", slice),
+                                src,
+                                &out_path,
+                                None,
+                            );
+                            successful_outputs.push(out_path);
+                        }
+                        Err(e) => {
+                            eprintln!("Conversion error for {}: {:?}", src.display(), e);
+                        }
+                    }
+                }
+
+                if let Some(first_out) = successful_outputs.first().cloned() {
+                    let badge = if successful_outputs.len() > 1 {
+                        Some(format!("{} files converted", successful_outputs.len()))
+                    } else {
+                        None
+                    };
+
+                    glib::idle_add_once(move || {
+                        DropShelf::spawn(first_out, badge, |chained_file| {
+                            if let Some(app) = gio::Application::default()
+                                .and_then(|a| a.downcast::<gtk4::Application>().ok())
+                            {
                                 OverlayWindow::spawn(&app, Some(chained_file));
-                            });
+                            }
                         });
-                    }
-                    Err(e) => {
-                        eprintln!("Conversion error for {}: {:?}", src.display(), e);
-                    }
+                    });
                 }
             });
         }
         RadialMode::QuickActions => {
+            let primary_file = source_files[0].clone();
+
             let on_chain = |chained_file: PathBuf| {
-                let app = gtk4::Application::default();
-                OverlayWindow::spawn(&app, Some(chained_file));
+                if let Some(app) = gio::Application::default()
+                    .and_then(|a| a.downcast::<gtk4::Application>().ok())
+                {
+                    OverlayWindow::spawn(&app, Some(chained_file));
+                }
             };
 
             match slice_name {
                 "CROP" => {
                     window.close();
-                    open_crop_modal(window, &source_path, move |out_path| {
+                    open_crop_modal(window, &primary_file, move |out_path| {
                         DropShelf::spawn(out_path, None, on_chain);
                     });
                 }
                 "ADD BG" => {
                     window.close();
-                    open_add_bg_modal(window, &source_path, move |out_path| {
+                    open_add_bg_modal(window, &primary_file, move |out_path| {
                         DropShelf::spawn(out_path, None, on_chain);
                     });
                 }
                 "COMPRESS" => {
                     window.close();
-                    let src = source_path.clone();
+                    let files_to_compress = source_files.to_vec();
                     std::thread::spawn(move || {
-                        if let Ok(res) = compress_file(&src) {
-                            let badge = format!("Saved {:.0}%", res.percent_saved);
-                            let _ = ConfigManager::append_history(
-                                "COMPRESS",
-                                &src,
-                                &res.output_path,
-                                Some(res.percent_saved),
-                            );
+                        let mut last_output = None;
+                        let mut total_saved = 0.0;
+                        let count = files_to_compress.len();
+
+                        for src in &files_to_compress {
+                            if let Ok(res) = compress_file(src) {
+                                total_saved += res.percent_saved;
+                                let _ = ConfigManager::append_history(
+                                    "COMPRESS",
+                                    src,
+                                    &res.output_path,
+                                    Some(res.percent_saved),
+                                );
+                                last_output = Some(res.output_path);
+                            }
+                        }
+
+                        if let Some(out_path) = last_output {
+                            let avg_saved = if count > 0 { total_saved / count as f64 } else { 0.0 };
+                            let badge = format!("Saved {:.0}%", avg_saved);
                             glib::idle_add_once(move || {
-                                DropShelf::spawn(res.output_path, Some(badge), |chained_file| {
-                                    let app = gtk4::Application::default();
-                                    OverlayWindow::spawn(&app, Some(chained_file));
-                                });
+                                DropShelf::spawn(out_path, Some(badge), on_chain);
                             });
                         }
                     });
                 }
                 "REDACT" | "ANNOTATE" => {
                     window.close();
-                    open_redact_annotate_modal(window, &source_path, move |out_path| {
+                    open_redact_annotate_modal(window, &primary_file, move |out_path| {
                         DropShelf::spawn(out_path, None, on_chain);
                     });
                 }
                 "METADATA" => {
                     window.close();
-                    open_metadata_modal(window, &source_path, move |out_path| {
+                    open_metadata_modal(window, &primary_file, move |out_path| {
                         DropShelf::spawn(out_path, None, on_chain);
                     });
                 }
                 "EDIT" => {
                     window.close();
-                    open_quick_edit_modal(window, &source_path, move |out_path| {
+                    open_quick_edit_modal(window, &primary_file, move |out_path| {
                         DropShelf::spawn(out_path, None, on_chain);
                     });
                 }
                 "OCR / COPY" => {
                     window.close();
-                    let src = source_path.clone();
+                    let src = primary_file;
                     std::thread::spawn(move || {
                         // Try OCR first if tesseract is available
                         if let Ok(extracted) = ocr_image_and_copy(&src) {
