@@ -104,6 +104,8 @@ impl RadialMenu {
             .can_focus(true)
             .build();
 
+        drawing_area.add_css_class("hyprdrop-radial-canvas");
+
         let state_clone = state.clone();
         drawing_area.set_draw_func(move |_, cr, width, height| {
             let s = state_clone.borrow();

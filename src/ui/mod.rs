@@ -13,21 +13,30 @@ pub const CSS_THEME: &str = r#"
 /* --- Hyprdrop macOS Studio Electric Blue Design System --- */
 
 /* Transparent Layer-Shell Overlay */
+window.background.hyprdrop-overlay,
+window.hyprdrop-overlay.background,
 window.hyprdrop-overlay,
+.hyprdrop-overlay,
 window.hyprdrop-overlay > box,
 window.hyprdrop-overlay > contents,
 window.hyprdrop-overlay decoration,
 window.hyprdrop-overlay widget,
-window.hyprdrop-overlay drawingarea {
-    background-color: rgba(0, 0, 0, 0);
+window.hyprdrop-overlay drawingarea,
+.hyprdrop-radial-canvas {
+    background-color: transparent;
+    background: transparent;
     background-image: none;
     box-shadow: none;
     border-style: none;
 }
 
+window.background.hyprdrop-hotspot,
+window.hyprdrop-hotspot.background,
 window.hyprdrop-hotspot,
+.hyprdrop-hotspot,
 window.hyprdrop-hotspot > * {
-    background-color: rgba(0, 0, 0, 0);
+    background-color: transparent;
+    background: transparent;
     background-image: none;
     box-shadow: none;
     border-style: none;
@@ -301,7 +310,7 @@ pub fn init_css_theme() {
         gtk4::style_context_add_provider_for_display(
             &display,
             &provider,
-            gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION,
+            gtk4::STYLE_PROVIDER_PRIORITY_USER,
         );
     }
 }
