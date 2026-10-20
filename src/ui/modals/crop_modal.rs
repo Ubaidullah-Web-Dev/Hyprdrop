@@ -124,13 +124,35 @@ pub fn open_crop_modal(
 
     // Header Toolbar
     let header_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 12);
-    header_box.set_margin_start(16);
-    header_box.set_margin_end(16);
-    header_box.set_margin_top(12);
+    header_box.set_margin_start(18);
+    header_box.set_margin_end(18);
+    header_box.set_margin_top(14);
     header_box.set_margin_bottom(12);
 
-    let title_lbl = gtk4::Label::new(Some("Crop Image"));
-    title_lbl.add_css_class("hyprdrop-title");
+    let traffic_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
+    traffic_box.set_valign(gtk4::Align::Center);
+
+    let dot_close = gtk4::Button::new();
+    dot_close.add_css_class("mac-traffic-dot");
+    dot_close.add_css_class("mac-dot-close");
+    let win_close = window.clone();
+    dot_close.connect_clicked(move |_| win_close.close());
+
+    let dot_min = gtk4::Button::new();
+    dot_min.add_css_class("mac-traffic-dot");
+    dot_min.add_css_class("mac-dot-min");
+
+    let dot_max = gtk4::Button::new();
+    dot_max.add_css_class("mac-traffic-dot");
+    dot_max.add_css_class("mac-dot-max");
+
+    traffic_box.append(&dot_close);
+    traffic_box.append(&dot_min);
+    traffic_box.append(&dot_max);
+    header_box.append(&traffic_box);
+
+    let title_lbl = gtk4::Label::new(Some("Crop Studio"));
+    title_lbl.add_css_class("mac-title");
     header_box.append(&title_lbl);
 
     let spacer = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
@@ -577,9 +599,9 @@ fn draw_crop_canvas(cr: &Context, canvas_w: f64, canvas_h: f64, state: &CropStat
         let _ = cr.stroke();
     }
 
-    // Orange crop boundary box: #FF5722
+    // macOS Electric Blue crop boundary box: #0A84FF
     cr.rectangle(scx, scy, scw, sch);
-    cr.set_source_rgb(1.0, 0.34, 0.13);
+    cr.set_source_rgb(0.04, 0.52, 1.0);
     cr.set_line_width(2.0);
     let _ = cr.stroke();
 
@@ -600,7 +622,7 @@ fn draw_crop_canvas(cr: &Context, canvas_w: f64, canvas_h: f64, state: &CropStat
         cr.arc(hx, hy, hr, 0.0, 2.0 * std::f64::consts::PI);
         cr.set_source_rgb(1.0, 1.0, 1.0);
         let _ = cr.fill_preserve();
-        cr.set_source_rgb(1.0, 0.34, 0.13);
+        cr.set_source_rgb(0.04, 0.52, 1.0);
         cr.set_line_width(2.0);
         let _ = cr.stroke();
     }

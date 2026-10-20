@@ -16,23 +16,46 @@ impl SettingsApp {
             .default_height(580)
             .build();
 
-        window.add_css_class("hyprdrop-surface");
+        window.add_css_class("mac-window");
 
         let root_box = gtk4::Box::new(gtk4::Orientation::Vertical, 16);
         root_box.set_margin_start(24);
         root_box.set_margin_end(24);
-        root_box.set_margin_top(20);
+        root_box.set_margin_top(16);
         root_box.set_margin_bottom(20);
 
-        // Header
+        // macOS Header with traffic lights
         let header_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 12);
+
+        let traffic_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
+        traffic_box.set_valign(gtk4::Align::Center);
+
+        let dot_close = gtk4::Button::new();
+        dot_close.add_css_class("mac-traffic-dot");
+        dot_close.add_css_class("mac-dot-close");
+        let win_close = window.clone();
+        dot_close.connect_clicked(move |_| win_close.close());
+
+        let dot_min = gtk4::Button::new();
+        dot_min.add_css_class("mac-traffic-dot");
+        dot_min.add_css_class("mac-dot-min");
+
+        let dot_max = gtk4::Button::new();
+        dot_max.add_css_class("mac-traffic-dot");
+        dot_max.add_css_class("mac-dot-max");
+
+        traffic_box.append(&dot_close);
+        traffic_box.append(&dot_min);
+        traffic_box.append(&dot_max);
+        header_box.append(&traffic_box);
+
         let title_lbl = gtk4::Label::new(Some("Hyprdrop"));
-        title_lbl.add_css_class("hyprdrop-title");
-        title_lbl.set_markup("<span size='x-large' weight='bold'>Hyprdrop</span>");
+        title_lbl.add_css_class("mac-title");
+        title_lbl.set_markup("<span size='large' weight='bold'>Hyprdrop</span>");
         header_box.append(&title_lbl);
 
-        let ver_lbl = gtk4::Label::new(Some("v0.1.0 • Arch / Hyprland"));
-        ver_lbl.add_css_class("hyprdrop-subtitle");
+        let ver_lbl = gtk4::Label::new(Some("v0.1.0 • macOS Studio Edition"));
+        ver_lbl.add_css_class("mac-subtitle");
         header_box.append(&ver_lbl);
 
         let spacer = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);

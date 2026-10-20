@@ -40,7 +40,7 @@ hl.layer_rule({
     name = "hyprdrop",
     match = { namespace = "hyprdrop" },
     blur = true,
-    ignore_alpha = 0.0,
+    ignore_alpha = 0.1,
     animation = "popin 80%",
 })
 

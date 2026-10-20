@@ -6,145 +6,226 @@ pub mod radial_menu;
 pub mod settings_app;
 pub mod tray;
 
-
 use gtk4::gdk::Display;
 use gtk4::CssProvider;
 
 pub const CSS_THEME: &str = r#"
-/* --- Hyprdrop Industrial Dark Studio Theme --- */
+/* --- Hyprdrop macOS Studio Electric Blue Design System --- */
 
-window.hyprdrop-overlay {
-    background-color: transparent;
+/* Transparent Layer-Shell Overlay */
+window.hyprdrop-overlay,
+window.hyprdrop-overlay > box,
+window.hyprdrop-overlay > contents,
+window.hyprdrop-overlay decoration,
+window.hyprdrop-overlay widget,
+window.hyprdrop-overlay drawingarea {
+    background-color: rgba(0, 0, 0, 0);
+    background-image: none;
+    box-shadow: none;
+    border-style: none;
 }
 
-window.hyprdrop-hotspot {
-    background-color: transparent;
+window.hyprdrop-hotspot,
+window.hyprdrop-hotspot > * {
+    background-color: rgba(0, 0, 0, 0);
+    background-image: none;
+    box-shadow: none;
+    border-style: none;
 }
 
 .hyprdrop-hotspot-bar {
-    background-color: rgba(33, 33, 36, 0.45);
-    border-left: 1px solid rgba(255, 255, 255, 0.1);
+    background-color: rgba(30, 30, 36, 0.45);
+    border-left: 1px solid rgba(255, 255, 255, 0.12);
     border-radius: 4px 0 0 4px;
-    transition: all 150ms ease-out;
+    transition: all 180ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .hyprdrop-hotspot-bar:hover,
 .hyprdrop-hotspot-bar.active {
-    background-color: #FF5722;
-    box-shadow: 0 0 14px rgba(255, 87, 34, 0.6);
+    background-color: #0A84FF;
+    box-shadow: 0 0 16px rgba(10, 132, 255, 0.7);
 }
 
-.hyprdrop-surface {
-    background-color: rgba(22, 22, 24, 0.94);
+/* macOS Studio Surface */
+.hyprdrop-surface,
+.mac-window {
+    background-color: rgba(18, 18, 22, 0.96);
     border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 14px;
-    box-shadow: 0 16px 36px rgba(0, 0, 0, 0.45);
+    border-radius: 20px;
+    box-shadow: 0 24px 64px rgba(0, 0, 0, 0.65);
 }
 
-.hyprdrop-card {
-    background-color: #212124;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 8px;
-    padding: 10px;
+.hyprdrop-card,
+.mac-card {
+    background-color: #1A1A20;
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    border-radius: 12px;
+    padding: 12px;
 }
 
-.hyprdrop-title {
-    color: #F4F4F6;
+.hyprdrop-title,
+.mac-title {
+    color: #F8F8FC;
     font-weight: 700;
     font-size: 15px;
-    letter-spacing: -0.02em;
+    letter-spacing: -0.015em;
 }
 
-.hyprdrop-subtitle {
-    color: #9E9EA8;
+.hyprdrop-subtitle,
+.mac-subtitle {
+    color: #8E8E96;
     font-size: 12px;
+    font-weight: 500;
 }
 
-.hyprdrop-mono {
-    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+.mac-section-header {
+    color: #8E8E96;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.hyprdrop-mono,
+.mac-mono {
+    font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
     font-size: 12px;
+    color: #E2E2E8;
 }
 
-/* Primary Button (International Warm Orange) */
-button.hyprdrop-primary {
-    background-color: #FF5722;
+/* Traffic Light Buttons */
+.mac-traffic-dot {
+    border-radius: 50%;
+    min-width: 12px;
+    min-height: 12px;
+    padding: 0;
+    border: none;
+}
+
+.mac-dot-close {
+    background-color: #FF5F56;
+    border: 1px solid #E0443E;
+}
+
+.mac-dot-close:hover {
+    background-color: #FF7B74;
+}
+
+.mac-dot-min {
+    background-color: #FFBD2E;
+    border: 1px solid #DEA123;
+}
+
+.mac-dot-min:hover {
+    background-color: #FFCF66;
+}
+
+.mac-dot-max {
+    background-color: #27C93F;
+    border: 1px solid #1AAB29;
+}
+
+.mac-dot-max:hover {
+    background-color: #42D858;
+}
+
+/* Primary Button (macOS Electric Blue) */
+button.hyprdrop-primary,
+button.mac-primary {
+    background-color: #0A84FF;
     color: #FFFFFF;
     font-weight: 600;
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    border-radius: 6px;
-    padding: 8px 16px;
-    transition: background-color 150ms ease-out, transform 100ms ease-out;
+    font-size: 13px;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 20px;
+    padding: 8px 20px;
+    box-shadow: 0 4px 16px rgba(10, 132, 255, 0.4);
+    transition: all 180ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-button.hyprdrop-primary:hover {
-    background-color: #FF784E;
+button.hyprdrop-primary:hover,
+button.mac-primary:hover {
+    background-color: #2E95FF;
+    box-shadow: 0 6px 20px rgba(10, 132, 255, 0.55);
 }
 
-button.hyprdrop-primary:active {
+button.hyprdrop-primary:active,
+button.mac-primary:active {
     transform: translateY(1px);
-    background-color: #E64A19;
+    background-color: #006FD6;
 }
 
-/* Secondary Button */
-button.hyprdrop-secondary {
-    background-color: #212124;
-    color: #F4F4F6;
+/* Secondary Button (macOS Sleek Dark Pill) */
+button.hyprdrop-secondary,
+button.mac-secondary {
+    background-color: #24242C;
+    color: #EAEAEE;
+    font-weight: 500;
+    font-size: 13px;
     border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 6px;
-    padding: 8px 14px;
-    transition: background-color 150ms ease-out;
+    border-radius: 20px;
+    padding: 8px 18px;
+    transition: all 150ms ease-out;
 }
 
-button.hyprdrop-secondary:hover {
-    background-color: #2E2E33;
+button.hyprdrop-secondary:hover,
+button.mac-secondary:hover {
+    background-color: #2E2E38;
     border-color: rgba(255, 255, 255, 0.16);
+    color: #FFFFFF;
 }
 
-button.hyprdrop-secondary:active {
-    background-color: #1A1A1C;
+button.hyprdrop-secondary:active,
+button.mac-secondary:active {
+    background-color: #1A1A20;
     transform: translateY(1px);
 }
 
 /* Destructive / Reset Button */
 button.hyprdrop-danger {
-    background-color: rgba(239, 68, 68, 0.15);
-    color: #EF4444;
-    border: 1px solid rgba(239, 68, 68, 0.3);
-    border-radius: 6px;
-    padding: 8px 14px;
+    background-color: rgba(255, 69, 58, 0.15);
+    color: #FF453A;
+    border: 1px solid rgba(255, 69, 58, 0.3);
+    border-radius: 20px;
+    padding: 8px 16px;
 }
 
 button.hyprdrop-danger:hover {
-    background-color: rgba(239, 68, 68, 0.25);
+    background-color: rgba(255, 69, 58, 0.25);
 }
 
-/* Pills & Presets */
-button.hyprdrop-pill {
-    background-color: #212124;
-    color: #9E9EA8;
-    border: 1px solid rgba(255, 255, 255, 0.06);
+/* Pills & Presets (macOS Segmented Style) */
+button.hyprdrop-pill,
+button.mac-pill {
+    background-color: #222228;
+    color: #9E9EA6;
+    border: 1px solid rgba(255, 255, 255, 0.07);
     border-radius: 16px;
-    padding: 4px 12px;
-    font-size: 11px;
+    padding: 5px 14px;
+    font-size: 12px;
     font-weight: 600;
+    transition: all 150ms ease-out;
 }
 
-button.hyprdrop-pill:hover {
-    color: #F4F4F6;
-    background-color: #2C2C30;
-}
-
-button.hyprdrop-pill.active {
-    background-color: #FF5722;
+button.hyprdrop-pill:hover,
+button.mac-pill:hover {
     color: #FFFFFF;
-    border-color: #FF784E;
+    background-color: #2C2C34;
+}
+
+button.hyprdrop-pill.active,
+button.mac-pill.active {
+    background-color: #0A84FF;
+    color: #FFFFFF;
+    border-color: #0A84FF;
+    box-shadow: 0 2px 10px rgba(10, 132, 255, 0.45);
 }
 
 /* Badges */
 .badge-success {
-    background-color: rgba(16, 185, 129, 0.15);
-    color: #10B981;
-    border-radius: 4px;
+    background-color: rgba(48, 209, 88, 0.15);
+    color: #30D158;
+    border-radius: 6px;
     padding: 2px 8px;
     font-weight: 600;
     font-family: monospace;
@@ -152,9 +233,9 @@ button.hyprdrop-pill.active {
 }
 
 .badge-warning {
-    background-color: rgba(245, 158, 11, 0.15);
-    color: #F59E0B;
-    border-radius: 4px;
+    background-color: rgba(255, 159, 10, 0.15);
+    color: #FF9F0A;
+    border-radius: 6px;
     padding: 2px 8px;
     font-weight: 600;
     font-size: 11px;
@@ -162,49 +243,54 @@ button.hyprdrop-pill.active {
 
 /* Drop Shelf Widget */
 .hyprdrop-shelf {
-    background-color: rgba(22, 22, 24, 0.96);
+    background-color: rgba(18, 18, 22, 0.96);
     border: 1px solid rgba(255, 255, 255, 0.12);
-    border-radius: 12px;
-    padding: 12px;
-    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.5);
+    border-radius: 16px;
+    padding: 14px;
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6);
 }
 
-/* Sliders */
+/* Sleek macOS Sliders */
 scale trough {
-    background-color: #212124;
+    background-color: #24242A;
     border-radius: 4px;
-    min-height: 6px;
+    min-height: 5px;
 }
 
 scale highlight {
-    background-color: #FF5722;
+    background-color: #0A84FF;
     border-radius: 4px;
 }
 
 scale slider {
-    background-color: #F4F4F6;
+    background-color: #FFFFFF;
+    border: 1px solid rgba(0, 0, 0, 0.2);
     border-radius: 50%;
-    min-width: 14px;
-    min-height: 14px;
+    min-width: 16px;
+    min-height: 16px;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
 }
 
-/* Studio Background 16 Presets */
-.bg-preset-0 { background: linear-gradient(135deg, rgb(22, 22, 26), rgb(36, 36, 44)); border-radius: 6px; border: 1px solid rgba(255,255,255,0.15); }
-.bg-preset-1 { background: linear-gradient(135deg, rgb(255, 87, 34), rgb(255, 142, 60)); border-radius: 6px; border: 1px solid rgba(255,255,255,0.15); }
-.bg-preset-2 { background: linear-gradient(135deg, rgb(15, 23, 42), rgb(56, 189, 248)); border-radius: 6px; border: 1px solid rgba(255,255,255,0.15); }
-.bg-preset-3 { background: linear-gradient(135deg, rgb(12, 43, 26), rgb(34, 197, 94)); border-radius: 6px; border: 1px solid rgba(255,255,255,0.15); }
-.bg-preset-4 { background: linear-gradient(135deg, rgb(18, 18, 20), rgb(38, 38, 42)); border-radius: 6px; border: 1px solid rgba(255,255,255,0.15); }
-.bg-preset-5 { background: linear-gradient(135deg, rgb(46, 16, 101), rgb(147, 51, 234)); border-radius: 6px; border: 1px solid rgba(255,255,255,0.15); }
-.bg-preset-6 { background: linear-gradient(135deg, rgb(38, 20, 10), rgb(245, 158, 11)); border-radius: 6px; border: 1px solid rgba(255,255,255,0.15); }
-.bg-preset-7 { background: linear-gradient(135deg, rgb(224, 242, 254), rgb(186, 230, 253)); border-radius: 6px; border: 1px solid rgba(255,255,255,0.15); }
-.bg-preset-8 { background: linear-gradient(135deg, rgb(15, 15, 18), rgb(30, 41, 59)); border-radius: 6px; border: 1px solid rgba(255,255,255,0.15); }
-.bg-preset-9 { background: linear-gradient(135deg, rgb(244, 63, 94), rgb(251, 146, 60)); border-radius: 6px; border: 1px solid rgba(255,255,255,0.15); }
-.bg-preset-10 { background: linear-gradient(135deg, rgb(29, 78, 216), rgb(96, 165, 250)); border-radius: 6px; border: 1px solid rgba(255,255,255,0.15); }
-.bg-preset-11 { background: linear-gradient(135deg, rgb(6, 78, 59), rgb(16, 185, 129)); border-radius: 6px; border: 1px solid rgba(255,255,255,0.15); }
-.bg-preset-12 { background: linear-gradient(135deg, rgb(248, 250, 252), rgb(241, 245, 249)); border-radius: 6px; border: 1px solid rgba(255,255,255,0.15); }
-.bg-preset-13 { background: linear-gradient(135deg, rgb(51, 65, 85), rgb(100, 116, 139)); border-radius: 6px; border: 1px solid rgba(255,255,255,0.15); }
-.bg-preset-14 { background: linear-gradient(135deg, rgb(255, 69, 0), rgb(255, 107, 43)); border-radius: 6px; border: 1px solid rgba(255,255,255,0.15); }
-.bg-preset-15 { background: linear-gradient(135deg, rgb(220, 38, 38), rgb(234, 179, 8)); border-radius: 6px; border: 1px solid rgba(255,255,255,0.15); }
+scale slider:hover {
+    transform: scale(1.1);
+}
+
+/* Palette Swatch Buttons */
+.mac-swatch-btn {
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    transition: all 150ms ease-out;
+    padding: 0;
+}
+
+.mac-swatch-btn:hover {
+    transform: scale(1.08);
+}
+
+.mac-swatch-btn.active {
+    box-shadow: 0 0 0 2px #121216, 0 0 0 4px #0A84FF;
+    transform: scale(1.05);
+}
 "#;
 
 pub fn init_css_theme() {

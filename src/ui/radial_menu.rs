@@ -2,14 +2,14 @@ use std::cell::RefCell;
 use std::f64::consts::PI;
 use std::path::PathBuf;
 use std::rc::Rc;
-use gtk4::cairo::{Context, FontSlant, FontWeight};
+use gtk4::cairo::{Context, FontSlant, FontWeight, Operator};
 use gtk4::glib;
 use gtk4::prelude::*;
 use crate::engine::{FileCategory, format_file_size, get_conversion_slices, get_quick_action_slices};
 
-pub const RADIAL_SIZE: i32 = 380;
-pub const INNER_RADIUS: f64 = 54.0;
-pub const OUTER_RADIUS: f64 = 175.0;
+pub const RADIAL_SIZE: i32 = 400;
+pub const INNER_RADIUS: f64 = 56.0;
+pub const OUTER_RADIUS: f64 = 176.0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RadialMode {
@@ -191,6 +191,12 @@ impl RadialMenu {
     }
 
     fn draw_radial_menu(cr: &Context, width: f64, height: f64, state: &RadialState) {
+        // Ensure 100% transparent canvas background
+        cr.save().ok();
+        cr.set_operator(Operator::Clear);
+        let _ = cr.paint();
+        cr.restore().ok();
+
         let cx = width / 2.0;
         let cy = height / 2.0;
 
@@ -199,20 +205,14 @@ impl RadialMenu {
             RadialMode::QuickActions => get_quick_action_slices(state.file_category),
         };
         let slice_count = slices.len();
+        if slice_count == 0 {
+            return;
+        }
+
         let slice_angle = (2.0 * PI) / (slice_count as f64);
+        let gap_angle = 0.055; // Crisp gap between modern curved sectors
 
-        // Background Disc shadow / border
-        cr.arc(cx, cy, OUTER_RADIUS + 3.0, 0.0, 2.0 * PI);
-        cr.set_source_rgba(0.08, 0.08, 0.09, 0.45);
-        let _ = cr.fill();
-
-        // Outer rim ring
-        cr.arc(cx, cy, OUTER_RADIUS, 0.0, 2.0 * PI);
-        cr.set_source_rgba(1.0, 1.0, 1.0, 0.06);
-        cr.set_line_width(1.0);
-        let _ = cr.stroke();
-
-        // Render Slices
+        // Render Slices (Modern macOS Island Sectors with Rounded Corners & Pop-Out Hover)
         for (i, &slice_label) in slices.iter().enumerate() {
             let start_angle = -PI / 2.0 + (i as f64) * slice_angle;
             let end_angle = start_angle + slice_angle;
@@ -222,46 +222,64 @@ impl RadialMenu {
                 _ => false,
             };
 
-            // Slice arc path
-            cr.new_sub_path();
-            cr.arc(cx, cy, OUTER_RADIUS - 1.0, start_angle, end_angle);
-            cr.arc_negative(cx, cy, INNER_RADIUS + 1.0, end_angle, start_angle);
-            cr.close_path();
+            let mid_angle = start_angle + slice_angle / 2.0;
+
+            // When hovered: pop-out displacement outward along radial angle + expansion
+            let (pop_dx, pop_dy, r_in, r_out) = if is_hovered {
+                let pop_dist = 8.0;
+                (
+                    pop_dist * mid_angle.cos(),
+                    pop_dist * mid_angle.sin(),
+                    INNER_RADIUS + 4.0,
+                    OUTER_RADIUS + 4.0,
+                )
+            } else {
+                (0.0, 0.0, INNER_RADIUS + 6.0, OUTER_RADIUS - 2.0)
+            };
+
+            let sector_cx = cx + pop_dx;
+            let sector_cy = cy + pop_dy;
+
+            let a_start = start_angle + gap_angle / 2.0;
+            let a_end = end_angle - gap_angle / 2.0;
+
+            // Draw rounded annular sector
+            Self::draw_rounded_sector(cr, sector_cx, sector_cy, r_in, r_out, a_start, a_end, 7.0);
 
             if is_hovered {
-                // Active/Hover slice: #FF5722 (International Warm Orange)
-                cr.set_source_rgba(1.0, 0.34, 0.13, 0.98);
+                // macOS Electric Blue with subtle gradient / glow
+                cr.set_source_rgba(0.04, 0.52, 1.0, 0.96); // #0A84FF
                 let _ = cr.fill_preserve();
-                cr.set_source_rgba(1.0, 0.47, 0.31, 0.8);
-                cr.set_line_width(1.5);
+                cr.set_source_rgba(0.40, 0.72, 1.0, 0.85);
+                cr.set_line_width(1.8);
                 let _ = cr.stroke();
             } else {
-                // Elevated card slice: #212124 (94% opacity)
-                cr.set_source_rgba(0.129, 0.129, 0.141, 0.94);
+                // Sleek macOS dark frosted card slice
+                cr.set_source_rgba(0.11, 0.11, 0.14, 0.88);
                 let _ = cr.fill_preserve();
-                // 1px subtle divider: rgba(255, 255, 255, 0.08)
-                cr.set_source_rgba(1.0, 1.0, 1.0, 0.08);
+                // Subtle 1px frosted border
+                cr.set_source_rgba(1.0, 1.0, 1.0, 0.10);
                 cr.set_line_width(1.0);
                 let _ = cr.stroke();
             }
 
-            // Draw label
-            let mid_angle = start_angle + slice_angle / 2.0;
-            let mid_r = (INNER_RADIUS + OUTER_RADIUS) / 2.0;
-            let label_x = cx + mid_r * mid_angle.cos();
-            let label_y = cy + mid_r * mid_angle.sin();
+            // Draw Slice Label (centered within the sector)
+            let mid_r = (r_in + r_out) / 2.0;
+            let label_x = sector_cx + mid_r * mid_angle.cos();
+            let label_y = sector_cy + mid_r * mid_angle.sin();
 
             cr.select_font_face("Sans", FontSlant::Normal, FontWeight::Bold);
-            let font_size = if slice_label.len() > 8 { 10.0 } else { 12.0 };
+            let font_size = if slice_label.len() > 7 { 10.5 } else { 12.0 };
             cr.set_font_size(font_size);
 
             if is_hovered {
                 cr.set_source_rgb(1.0, 1.0, 1.0);
             } else {
-                cr.set_source_rgb(0.95, 0.95, 0.96);
+                cr.set_source_rgb(0.92, 0.92, 0.96);
             }
 
             if let Ok(extents) = cr.text_extents(slice_label) {
+                cr.new_sub_path();
                 cr.move_to(
                     label_x - extents.width() / 2.0 - extents.x_bearing(),
                     label_y - extents.height() / 2.0 - extents.y_bearing(),
@@ -270,23 +288,26 @@ impl RadialMenu {
             }
         }
 
-        // Center Hub
+        // --- Center Hub ---
+        // Clean sub path to PREVENT any diagonal lines
+        cr.new_sub_path();
+
         let is_center_hovered = state.hovered_zone == HitZone::CenterHub;
 
         cr.arc(cx, cy, INNER_RADIUS, 0.0, 2.0 * PI);
         if is_center_hovered {
-            cr.set_source_rgba(0.18, 0.18, 0.20, 0.98);
+            cr.set_source_rgba(0.14, 0.14, 0.18, 0.98);
         } else {
-            cr.set_source_rgba(0.086, 0.086, 0.094, 0.95);
+            cr.set_source_rgba(0.08, 0.08, 0.10, 0.94);
         }
         let _ = cr.fill_preserve();
 
-        // Center hub border: orange if center hovered, subtle border otherwise
+        // Center hub border: macOS Blue if hovered, translucent rim otherwise
         if is_center_hovered {
-            cr.set_source_rgba(1.0, 0.34, 0.13, 0.9);
+            cr.set_source_rgba(0.04, 0.52, 1.0, 0.90);
             cr.set_line_width(2.0);
         } else {
-            cr.set_source_rgba(1.0, 1.0, 1.0, 0.12);
+            cr.set_source_rgba(1.0, 1.0, 1.0, 0.14);
             cr.set_line_width(1.0);
         }
         let _ = cr.stroke();
@@ -294,14 +315,15 @@ impl RadialMenu {
         // Center Hub Typography
         match state.hovered_zone {
             HitZone::Slice(idx) if idx < slices.len() => {
-                // Display hovered format or action in bright warm orange
+                // Display hovered format or action in bright macOS Electric Blue
                 cr.select_font_face("Sans", FontSlant::Normal, FontWeight::Bold);
                 let hover_text = slices[idx];
                 let fsize = if hover_text.len() > 8 { 12.0 } else { 14.0 };
                 cr.set_font_size(fsize);
-                cr.set_source_rgb(1.0, 0.34, 0.13);
+                cr.set_source_rgb(0.18, 0.60, 1.0); // Electric Blue text
 
                 if let Ok(ext) = cr.text_extents(hover_text) {
+                    cr.new_sub_path();
                     cr.move_to(
                         cx - ext.width() / 2.0 - ext.x_bearing(),
                         cy - ext.height() / 2.0 - ext.y_bearing() - 4.0,
@@ -312,12 +334,13 @@ impl RadialMenu {
                 // Subtitle: Action hint
                 cr.select_font_face("Monospace", FontSlant::Normal, FontWeight::Normal);
                 cr.set_font_size(9.0);
-                cr.set_source_rgb(0.62, 0.62, 0.66);
+                cr.set_source_rgb(0.60, 0.60, 0.66);
                 let sub = match state.mode {
                     RadialMode::FormatConversion => "CONVERT",
                     RadialMode::QuickActions => "ACTION",
                 };
                 if let Ok(ext) = cr.text_extents(sub) {
+                    cr.new_sub_path();
                     cr.move_to(
                         cx - ext.width() / 2.0 - ext.x_bearing(),
                         cy + 14.0 - ext.y_bearing(),
@@ -348,13 +371,14 @@ impl RadialMenu {
                 };
 
                 cr.select_font_face("Monospace", FontSlant::Normal, FontWeight::Bold);
-                cr.set_font_size(13.0);
-                cr.set_source_rgb(0.96, 0.96, 0.97);
+                cr.set_font_size(12.5);
+                cr.set_source_rgb(0.96, 0.96, 0.98);
 
                 if let Ok(ext) = cr.text_extents(&main_text) {
+                    cr.new_sub_path();
                     cr.move_to(
                         cx - ext.width() / 2.0 - ext.x_bearing(),
-                        cy - ext.height() / 2.0 - ext.y_bearing() - 6.0,
+                        cy - ext.height() / 2.0 - ext.y_bearing() - 5.0,
                     );
                     let _ = cr.show_text(&main_text);
                 }
@@ -367,16 +391,60 @@ impl RadialMenu {
                 let sub_display = sub_override.unwrap_or_else(|| mode_str.to_string());
                 cr.select_font_face("Sans", FontSlant::Normal, FontWeight::Bold);
                 cr.set_font_size(9.0);
-                cr.set_source_rgba(1.0, 0.34, 0.13, 0.85);
+                cr.set_source_rgba(0.18, 0.60, 1.0, 0.90); // macOS Blue
 
                 if let Ok(ext) = cr.text_extents(&sub_display) {
+                    cr.new_sub_path();
                     cr.move_to(
                         cx - ext.width() / 2.0 - ext.x_bearing(),
-                        cy + 12.0 - ext.y_bearing(),
+                        cy + 13.0 - ext.y_bearing(),
                     );
                     let _ = cr.show_text(&sub_display);
                 }
             }
         }
+    }
+
+    /// Draws an annular sector with rounded corners on all 4 vertices.
+    #[allow(clippy::too_many_arguments)]
+    fn draw_rounded_sector(
+        cr: &Context,
+        cx: f64,
+        cy: f64,
+        r_in: f64,
+        r_out: f64,
+        a_start: f64,
+        a_end: f64,
+        corner_r: f64,
+    ) {
+        let span = a_end - a_start;
+        let da_in = (corner_r / r_in).min(span / 4.0);
+        let da_out = (corner_r / r_out).min(span / 4.0);
+        let dr = corner_r.min((r_out - r_in) / 3.0);
+
+        cr.new_sub_path();
+
+        // 1. Inner arc from a_start + da_in to a_end - da_in
+        cr.arc(cx, cy, r_in, a_start + da_in, a_end - da_in);
+
+        // 2. Corner to straight outer edge at a_end
+        let x_in_end = cx + (r_in + dr) * a_end.cos();
+        let y_in_end = cy + (r_in + dr) * a_end.sin();
+        cr.line_to(x_in_end, y_in_end);
+
+        // 3. Straight edge to r_out - dr at a_end
+        let x_out_end = cx + (r_out - dr) * a_end.cos();
+        let y_out_end = cy + (r_out - dr) * a_end.sin();
+        cr.line_to(x_out_end, y_out_end);
+
+        // 4. Outer arc from a_end - da_out back to a_start + da_out
+        cr.arc_negative(cx, cy, r_out, a_end - da_out, a_start + da_out);
+
+        // 5. Straight edge at a_start from r_out - dr down to r_in + dr
+        let x_in_start = cx + (r_in + dr) * a_start.cos();
+        let y_in_start = cy + (r_in + dr) * a_start.sin();
+        cr.line_to(x_in_start, y_in_start);
+
+        cr.close_path();
     }
 }

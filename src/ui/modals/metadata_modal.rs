@@ -29,19 +29,39 @@ pub fn open_metadata_modal(
     let root_box = gtk4::Box::new(gtk4::Orientation::Vertical, 12);
     root_box.set_margin_start(20);
     root_box.set_margin_end(20);
-    root_box.set_margin_top(20);
+    root_box.set_margin_top(16);
     root_box.set_margin_bottom(20);
-    root_box.add_css_class("hyprdrop-surface");
+    root_box.add_css_class("mac-window");
 
-    // Header
+    // macOS Header
     let header_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 12);
-    let title_lbl = gtk4::Label::new(Some("Metadata Inspector"));
-    title_lbl.add_css_class("hyprdrop-title");
-    header_box.append(&title_lbl);
+    let traffic_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
+    traffic_box.set_valign(gtk4::Align::Center);
 
-    let spacer = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
-    spacer.set_hexpand(true);
-    header_box.append(&spacer);
+    let dot_close = gtk4::Button::new();
+    dot_close.add_css_class("mac-traffic-dot");
+    dot_close.add_css_class("mac-dot-close");
+    let win_close = window.clone();
+    dot_close.connect_clicked(move |_| win_close.close());
+
+    let dot_min = gtk4::Button::new();
+    dot_min.add_css_class("mac-traffic-dot");
+    dot_min.add_css_class("mac-dot-min");
+
+    let dot_max = gtk4::Button::new();
+    dot_max.add_css_class("mac-traffic-dot");
+    dot_max.add_css_class("mac-dot-max");
+
+    traffic_box.append(&dot_close);
+    traffic_box.append(&dot_min);
+    traffic_box.append(&dot_max);
+    header_box.append(&traffic_box);
+
+    let title_lbl = gtk4::Label::new(Some("Metadata Inspector"));
+    title_lbl.add_css_class("mac-title");
+    title_lbl.set_hexpand(true);
+    title_lbl.set_halign(gtk4::Align::Center);
+    header_box.append(&title_lbl);
 
     let size_badge = gtk4::Label::new(Some(&format_file_size(meta_info.file_size_bytes)));
     size_badge.add_css_class("badge-warning");

@@ -74,14 +74,36 @@ pub fn open_redact_annotate_modal(
     root_box.add_css_class("hyprdrop-surface");
 
     // Toolbar
-    let toolbar = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
-    toolbar.set_margin_start(16);
-    toolbar.set_margin_end(16);
-    toolbar.set_margin_top(12);
+    let toolbar = gtk4::Box::new(gtk4::Orientation::Horizontal, 10);
+    toolbar.set_margin_start(18);
+    toolbar.set_margin_end(18);
+    toolbar.set_margin_top(14);
     toolbar.set_margin_bottom(12);
 
+    let traffic_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
+    traffic_box.set_valign(gtk4::Align::Center);
+
+    let dot_close = gtk4::Button::new();
+    dot_close.add_css_class("mac-traffic-dot");
+    dot_close.add_css_class("mac-dot-close");
+    let win_close = window.clone();
+    dot_close.connect_clicked(move |_| win_close.close());
+
+    let dot_min = gtk4::Button::new();
+    dot_min.add_css_class("mac-traffic-dot");
+    dot_min.add_css_class("mac-dot-min");
+
+    let dot_max = gtk4::Button::new();
+    dot_max.add_css_class("mac-traffic-dot");
+    dot_max.add_css_class("mac-dot-max");
+
+    traffic_box.append(&dot_close);
+    traffic_box.append(&dot_min);
+    traffic_box.append(&dot_max);
+    toolbar.append(&traffic_box);
+
     let title_lbl = gtk4::Label::new(Some("Redact & Annotate"));
-    title_lbl.add_css_class("hyprdrop-title");
+    title_lbl.add_css_class("mac-title");
     toolbar.append(&title_lbl);
 
     let tools = [
@@ -238,7 +260,7 @@ pub fn open_redact_annotate_modal(
                     y1: start_y.round() as i32,
                     x2: img_x.round() as i32,
                     y2: img_y.round() as i32,
-                    color: [255, 87, 34, 255],
+                    color: [10, 132, 255, 255],
                     stroke_width: 4,
                 });
             }
@@ -248,7 +270,7 @@ pub fn open_redact_annotate_modal(
                     y: y1,
                     width: w.max(4),
                     height: h.max(4),
-                    color: [255, 87, 34, 255],
+                    color: [10, 132, 255, 255],
                     stroke_width: 3,
                 });
             }
@@ -258,7 +280,7 @@ pub fn open_redact_annotate_modal(
                     x: start_x.round() as u32,
                     y: start_y.round() as u32,
                     text: callout_text,
-                    color: [255, 87, 34, 255],
+                    color: [10, 132, 255, 255],
                 });
             }
         }
@@ -397,7 +419,7 @@ fn draw_redact_canvas(cr: &Context, cw: f64, ch: f64, state: &StudioState) {
         let w = (state.current_x - state.start_x).abs() * scale;
         let h = (state.current_y - state.start_y).abs() * scale;
 
-        cr.set_source_rgba(1.0, 0.34, 0.13, 0.6);
+        cr.set_source_rgba(0.04, 0.52, 1.0, 0.7);
         cr.rectangle(x1, y1, w, h);
         let _ = cr.stroke();
     }
