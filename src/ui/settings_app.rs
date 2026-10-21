@@ -99,6 +99,7 @@ impl SettingsApp {
         });
 
         window.set_child(Some(&root_box));
+        crate::hyprland::ensure_hyprland_floating_rules();
         window.present();
     }
 }

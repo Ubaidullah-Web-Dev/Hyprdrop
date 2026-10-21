@@ -70,6 +70,7 @@ impl HyprdropApp {
         app.connect_startup(|_| {
             init_css_theme();
             crate::engine::trim_memory();
+            crate::hyprland::ensure_hyprland_floating_rules();
         });
 
         app.connect_shutdown(|_| {
@@ -162,6 +163,7 @@ impl HyprdropApp {
                         OverlayWindow::toggle(&app_timer, None);
                     }
                     IpcMessage::Settings => {
+                        crate::hyprland::ensure_hyprland_floating_rules();
                         SettingsApp::spawn(&app_timer);
                     }
                     IpcMessage::Ping => {}

@@ -146,6 +146,8 @@ pub fn open_crop_modal(
         .default_height(640)
         .build();
 
+    window.add_css_class("hyprdrop-surface");
+
     let root_box = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
     root_box.add_css_class("hyprdrop-surface");
 
@@ -477,6 +479,7 @@ pub fn open_crop_modal(
     });
 
     window.set_child(Some(&root_box));
+    crate::hyprland::ensure_hyprland_floating_rules();
     window.present();
 }
 

@@ -113,12 +113,15 @@ fn test_configure_conf_hyprland_creates_backup_and_snippet() {
 
 #[test]
 fn test_snippets_validity() {
-    // Both snippets must have layer rules and mouse bind
+    // Both snippets must have window rules, layer rules, and mouse bind
+    assert!(LUA_CONFIG_SNIPPET.contains("hl.window_rule"));
+    assert!(LUA_CONFIG_SNIPPET.contains("float = true"));
     assert!(LUA_CONFIG_SNIPPET.contains("hl.layer_rule"));
     assert!(LUA_CONFIG_SNIPPET.contains("namespace = \"hyprdrop\""));
     assert!(LUA_CONFIG_SNIPPET.contains("SHIFT + mouse:272"));
     assert!(!LUA_CONFIG_SNIPPET.contains("SUPER"));
 
+    assert!(CONF_CONFIG_SNIPPET.contains("windowrulev2 = float"));
     assert!(CONF_CONFIG_SNIPPET.contains("layerrule = blur, hyprdrop"));
     assert!(CONF_CONFIG_SNIPPET.contains("bind = SHIFT, mouse:272, exec, hyprdrop trigger"));
     assert!(!CONF_CONFIG_SNIPPET.contains("SUPER"));

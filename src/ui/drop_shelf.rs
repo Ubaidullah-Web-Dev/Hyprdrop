@@ -29,7 +29,7 @@ impl DropShelf {
         }
         let window = builder.build();
 
-        window.add_css_class("hyprdrop-surface");
+        window.add_css_class("hyprdrop-shelf");
 
         // If layer shell supported, anchor to bottom right
         if gtk4_layer_shell::is_supported() {

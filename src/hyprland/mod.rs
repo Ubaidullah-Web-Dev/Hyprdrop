@@ -69,3 +69,29 @@ pub fn get_focused_monitor() -> Option<MonitorInfo> {
         .cloned()
         .or_else(|| monitors.into_iter().next())
 }
+
+/// Enforces floating and centering rules for all Hyprdrop windows and studio modals at runtime via `hyprctl`.
+pub fn ensure_hyprland_floating_rules() {
+    // Modern Lua-based dynamic window rules
+    let lua_code = r#"
+        if hl and hl.window_rule then
+            hl.window_rule({ name = "hyprdrop_float_class", match = { class = ".*hyprdrop.*" }, float = true, center = true })
+            hl.window_rule({ name = "hyprdrop_float_title", match = { title = ".*Hyprdrop.*" }, float = true, center = true })
+        end
+    "#;
+    let _ = Command::new("hyprctl").args(["eval", lua_code]).output();
+
+    // Legacy keyword windowrulev2 for classic .conf setups
+    let _ = Command::new("hyprctl")
+        .args(["keyword", "windowrulev2", "float, class:^(.*hyprdrop.*)$"])
+        .output();
+    let _ = Command::new("hyprctl")
+        .args(["keyword", "windowrulev2", "center, class:^(.*hyprdrop.*)$"])
+        .output();
+    let _ = Command::new("hyprctl")
+        .args(["keyword", "windowrulev2", "float, title:^(.*Hyprdrop.*)$"])
+        .output();
+    let _ = Command::new("hyprctl")
+        .args(["keyword", "windowrulev2", "center, title:^(.*Hyprdrop.*)$"])
+        .output();
+}

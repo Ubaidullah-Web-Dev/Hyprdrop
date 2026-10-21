@@ -89,13 +89,26 @@ window.hyprdrop-hotspot,
     opacity: 1.0;
 }
 
-/* macOS Studio Surface */
+/* App & Modal Windows - edge-to-edge solid background so Hyprland handles window border & rounding */
+window:not(.hyprdrop-overlay):not(.hyprdrop-hotspot):not(.hyprdrop-shelf),
+window:not(.hyprdrop-overlay):not(.hyprdrop-hotspot):not(.hyprdrop-shelf) decoration,
+window:not(.hyprdrop-overlay):not(.hyprdrop-hotspot):not(.hyprdrop-shelf).csd,
+window:not(.hyprdrop-overlay):not(.hyprdrop-hotspot):not(.hyprdrop-shelf).solid-csd,
+window:not(.hyprdrop-overlay):not(.hyprdrop-hotspot):not(.hyprdrop-shelf) > box,
 .hyprdrop-surface,
 .mac-window {
-    background-color: rgba(18, 18, 22, 0.96);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 20px;
-    box-shadow: 0 24px 64px rgba(0, 0, 0, 0.65);
+    background-color: #121216;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+}
+
+window:not(.hyprdrop-overlay):not(.hyprdrop-hotspot):not(.hyprdrop-shelf) decoration {
+    border-radius: 0;
+    border: none;
+    box-shadow: none;
+    margin: 0;
+    padding: 0;
 }
 
 .hyprdrop-card,

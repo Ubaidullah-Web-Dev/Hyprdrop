@@ -36,6 +36,28 @@ pub struct InstallResult {
 
 pub const LUA_CONFIG_SNIPPET: &str = r#"
 -- --- Hyprdrop Radial Utility Configuration ---
+hl.window_rule({
+    name = "hyprdrop_float_class",
+    match = { class = ".*hyprdrop.*" },
+    float = true,
+    center = true,
+})
+
+hl.window_rule({
+    name = "hyprdrop_float_title",
+    match = { title = ".*Hyprdrop.*" },
+    float = true,
+    center = true,
+})
+
+hl.layer_rule({
+    name = "hyprdrop_hotspot",
+    match = { namespace = "hyprdrop-hotspot" },
+    blur = false,
+    ignore_alpha = 0.0,
+    animation = "none",
+})
+
 hl.layer_rule({
     name = "hyprdrop",
     match = { namespace = "hyprdrop" },
@@ -53,6 +75,10 @@ hl.bind(
 
 pub const CONF_CONFIG_SNIPPET: &str = r#"
 # --- Hyprdrop Radial Utility Configuration ---
+windowrulev2 = float, class:^(.*hyprdrop.*)$
+windowrulev2 = center, class:^(.*hyprdrop.*)$
+windowrulev2 = float, title:^(.*Hyprdrop.*)$
+windowrulev2 = center, title:^(.*Hyprdrop.*)$
 layerrule = blur, hyprdrop
 layerrule = ignorezero, hyprdrop
 layerrule = animation popin 80%, hyprdrop

@@ -26,11 +26,13 @@ pub fn open_metadata_modal(
         .default_height(500)
         .build();
 
+    window.add_css_class("mac-window");
+
     let root_box = gtk4::Box::new(gtk4::Orientation::Vertical, 12);
-    root_box.set_margin_start(20);
-    root_box.set_margin_end(20);
-    root_box.set_margin_top(16);
-    root_box.set_margin_bottom(20);
+    root_box.set_margin_start(18);
+    root_box.set_margin_end(18);
+    root_box.set_margin_top(14);
+    root_box.set_margin_bottom(16);
     root_box.add_css_class("mac-window");
 
     // macOS Header
@@ -158,5 +160,6 @@ pub fn open_metadata_modal(
     });
 
     window.set_child(Some(&root_box));
+    crate::hyprland::ensure_hyprland_floating_rules();
     window.present();
 }

@@ -68,6 +68,8 @@ pub fn open_add_bg_modal(
         .default_height(860)
         .build();
 
+    window.add_css_class("mac-window");
+
     let root_box = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
     root_box.add_css_class("mac-window");
 
@@ -471,6 +473,7 @@ pub fn open_add_bg_modal(
     });
 
     window.set_child(Some(&root_box));
+    crate::hyprland::ensure_hyprland_floating_rules();
     window.present();
 }
 
