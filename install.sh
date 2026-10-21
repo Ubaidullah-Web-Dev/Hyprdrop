@@ -20,18 +20,26 @@ SYSTEMD_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
 mkdir -p "${BIN_DIR}" "${APP_DIR}" "${ICON_DIR}" "${SYSTEMD_DIR}"
 
 # 1. Build release binary if not present
-if [ ! -f "target/release/hyprdrop" ]; then
+if [ ! -f "target/release/hyprdrop" ] || [ ! -f "target/release/hyprdrop-detect-selection" ]; then
     echo "==> Building optimized release binary with LTO..."
     cargo build --release
 fi
 
+# Ensure helper binary is compiled
+if [ ! -f "target/release/hyprdrop-detect-selection" ]; then
+    echo "==> Compiling native hyprdrop-detect-selection helper..."
+    gcc -O3 c/hyprdrop-detect-selection.c $(pkg-config --cflags --libs atspi-2 gobject-2.0 glib-2.0) -o target/release/hyprdrop-detect-selection
+fi
+
 # 2. Install binary
-echo "==> Installing hyprdrop binary to ${BIN_DIR}..."
+echo "==> Installing hyprdrop binaries to ${BIN_DIR}..."
 if [ -w "${BIN_DIR}" ] || [ -w "$(dirname "${BIN_DIR}")" ]; then
     install -Dm755 "target/release/hyprdrop" "${BIN_DIR}/hyprdrop"
+    install -Dm755 "target/release/hyprdrop-detect-selection" "${BIN_DIR}/hyprdrop-detect-selection"
 else
     echo "Requesting sudo privileges for ${BIN_DIR} installation..."
     sudo install -Dm755 "target/release/hyprdrop" "${BIN_DIR}/hyprdrop"
+    sudo install -Dm755 "target/release/hyprdrop-detect-selection" "${BIN_DIR}/hyprdrop-detect-selection"
 fi
 
 # 3. Install desktop entry and icons

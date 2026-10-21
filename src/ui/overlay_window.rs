@@ -290,19 +290,36 @@ impl OverlayWindow {
 pub fn detect_selected_files() -> Vec<PathBuf> {
     let mut files = Vec::new();
 
-    // 1. Try querying the active file manager (e.g. Thunar) selection via accessibility bus with strict timeout
+    // 1. Try querying the active file manager (e.g. Thunar, Nautilus, Nemo) selection via accessibility bus
+    let helper_cmd = std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|d| d.join("hyprdrop-detect-selection")))
+        .filter(|p| p.exists())
+        .map(|p| p.to_string_lossy().to_string())
+        .or_else(|| {
+            dirs::home_dir()
+                .map(|h| h.join(".local/bin/hyprdrop-detect-selection"))
+                .filter(|p| p.exists())
+                .map(|p| p.to_string_lossy().to_string())
+        })
+        .unwrap_or_else(|| "hyprdrop-detect-selection".to_string());
+
     if let Ok(output) = Command::new("timeout")
-        .args(["0.2s", "hyprdrop-detect-selection"])
+        .args(["0.5s", &helper_cmd])
         .output()
         && output.status.success() {
         let text = String::from_utf8_lossy(&output.stdout);
-        let trimmed = text.trim();
-        if !trimmed.is_empty() {
-            let p = PathBuf::from(trimmed);
-            if p.exists() {
-                files.push(p);
-                return files;
+        for line in text.lines() {
+            let trimmed = line.trim();
+            if !trimmed.is_empty() {
+                let p = PathBuf::from(trimmed);
+                if p.exists() {
+                    files.push(p);
+                }
             }
+        }
+        if !files.is_empty() {
+            return files;
         }
     }
 

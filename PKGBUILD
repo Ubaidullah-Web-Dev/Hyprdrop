@@ -12,6 +12,7 @@ depends=(
     'gtk4-layer-shell'
     'cairo'
     'ffmpeg'
+    'at-spi2-core'
 )
 optdepends=(
     'poppler: for high-DPI PDF page rasterization (pdftoppm)'
@@ -34,6 +35,7 @@ check() {
 
 package() {
     install -Dm755 "target/release/hyprdrop" "$pkgdir/usr/bin/hyprdrop"
+    install -Dm755 "target/release/hyprdrop-detect-selection" "$pkgdir/usr/bin/hyprdrop-detect-selection"
     install -Dm644 "assets/hyprdrop.desktop" "$pkgdir/usr/share/applications/hyprdrop.desktop"
     install -Dm644 "assets/hyprdrop.svg" "$pkgdir/usr/share/icons/hicolor/scalable/apps/hyprdrop.svg"
     install -Dm644 "assets/hyprdrop.service" "$pkgdir/usr/lib/systemd/user/hyprdrop.service"

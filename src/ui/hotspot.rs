@@ -110,7 +110,8 @@ impl HotspotWindow {
         click.connect_pressed(move |_, _, _, _| {
             bar_click.remove_css_class("hovered");
             bar_click.remove_css_class("active");
-            OverlayWindow::spawn_with_files(&app_click, Vec::new());
+            let files = crate::ui::overlay_window::detect_selected_files();
+            OverlayWindow::spawn_with_files(&app_click, files);
         });
         bar.add_controller(click);
 
