@@ -12,7 +12,9 @@ use crate::engine::naming::get_suffixed_output_path;
 
 struct AddBgState {
     source_path: PathBuf,
-    image: DynamicImage,
+    preview_img: DynamicImage,
+    orig_w: u32,
+    _orig_h: u32,
     preset: StudioBackgroundPreset,
     padding: u32,
     corner_radius: f32,
@@ -33,9 +35,24 @@ pub fn open_add_bg_modal(
         }
     };
 
+    let (orig_w, orig_h) = (img.width(), img.height());
+    let max_dim = (orig_w.max(orig_h) as f64).max(1.0);
+    let preview_scale = (640.0 / max_dim).min(1.0);
+    let preview_img = if preview_scale < 1.0 {
+        img.resize(
+            ((orig_w as f64) * preview_scale).round() as u32,
+            ((orig_h as f64) * preview_scale).round() as u32,
+            image::imageops::FilterType::Triangle,
+        )
+    } else {
+        img
+    };
+
     let state = Rc::new(RefCell::new(AddBgState {
         source_path: image_path.to_path_buf(),
-        image: img,
+        preview_img,
+        orig_w,
+        _orig_h: orig_h,
         preset: StudioBackgroundPreset::SunsetOrange,
         padding: 64,
         corner_radius: 28.0,
@@ -425,26 +442,33 @@ pub fn open_add_bg_modal(
 
     save_btn.connect_clicked(move |_| {
         let s = state_save.borrow();
-        let rendered = render_studio_background(
-            &s.image,
-            s.preset,
-            s.padding,
-            s.corner_radius,
-            s.shadow_intensity,
-            s.aspect_ratio,
-        );
+        if let Ok(full_img) = load_image(&s.source_path) {
+            let rendered = render_studio_background(
+                &full_img,
+                s.preset,
+                s.padding,
+                s.corner_radius,
+                s.shadow_intensity,
+                s.aspect_ratio,
+            );
 
-        let out_path = get_suffixed_output_path(&s.source_path, "With Background", Some("png"));
-        if let Ok(()) = rendered.save(&out_path) {
-            let _ = ConfigManager::append_history("ADD BG", &s.source_path, &out_path, None);
-            on_success_rc(out_path);
+            let out_path = get_suffixed_output_path(&s.source_path, "With Background", Some("png"));
+            if let Ok(()) = rendered.save(&out_path) {
+                let _ = ConfigManager::append_history("ADD BG", &s.source_path, &out_path, None);
+                on_success_rc(out_path);
+            }
         }
         win_save.close();
+        crate::engine::trim_memory();
     });
     bottom_row.append(&save_btn);
 
     controls_box.append(&bottom_row);
     root_box.append(&controls_box);
+
+    window.connect_destroy(move |_| {
+        crate::engine::trim_memory();
+    });
 
     window.set_child(Some(&root_box));
     window.present();
@@ -540,25 +564,14 @@ fn draw_preview_backdrop(cr: &Context, canvas_w: f64, canvas_h: f64, state: &Add
     cr.set_line_width(1.0);
     let _ = cr.stroke();
 
-    // Generate smaller preview rendering for fluid interaction
-    let img_w = state.image.width() as f64;
-    let img_h = state.image.height() as f64;
-    let preview_scale = 480.0 / img_w.max(img_h).max(1.0);
-    let p_img = if preview_scale < 1.0 {
-        state.image.resize(
-            (img_w * preview_scale).round() as u32,
-            (img_h * preview_scale).round() as u32,
-            image::imageops::FilterType::Nearest,
-        )
-    } else {
-        state.image.clone()
-    };
+    let pw = state.preview_img.width() as f64;
+    let scale_factor = pw / (state.orig_w as f64).max(1.0);
 
-    let p_padding = ((state.padding as f64) * preview_scale).round() as u32;
-    let p_radius = (state.corner_radius as f64 * preview_scale) as f32;
+    let p_padding = ((state.padding as f64) * scale_factor).round() as u32;
+    let p_radius = (state.corner_radius as f64 * scale_factor) as f32;
 
     let rendered = render_studio_background(
-        &p_img,
+        &state.preview_img,
         state.preset,
         p_padding,
         p_radius,

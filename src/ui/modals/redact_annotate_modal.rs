@@ -23,7 +23,11 @@ pub enum ToolKind {
 
 struct StudioState {
     source_path: PathBuf,
-    image: DynamicImage,
+    preview_img: DynamicImage,
+    orig_w: f64,
+    _orig_h: f64,
+    preview_w: f64,
+    preview_h: f64,
     active_tool: ToolKind,
     redactions: Vec<RedactionRegion>,
     annotations: Vec<AnnotationElement>,
@@ -48,9 +52,27 @@ pub fn open_redact_annotate_modal(
         }
     };
 
+    let (orig_w, orig_h) = (img.width() as f64, img.height() as f64);
+    let max_dim = orig_w.max(orig_h);
+    let preview_scale = (800.0 / max_dim).min(1.0);
+    let preview_img = if preview_scale < 1.0 {
+        img.resize(
+            (orig_w * preview_scale).round() as u32,
+            (orig_h * preview_scale).round() as u32,
+            image::imageops::FilterType::Triangle,
+        )
+    } else {
+        img
+    };
+    let (preview_w, preview_h) = (preview_img.width() as f64, preview_img.height() as f64);
+
     let state = Rc::new(RefCell::new(StudioState {
         source_path: image_path.to_path_buf(),
-        image: img,
+        preview_img,
+        orig_w,
+        _orig_h: orig_h,
+        preview_w,
+        preview_h,
         active_tool: ToolKind::Blackout,
         redactions: Vec::new(),
         annotations: Vec::new(),
@@ -186,8 +208,8 @@ pub fn open_redact_annotate_modal(
         let (vx, vy, scale) = get_transform(
             canvas_click.width() as f64,
             canvas_click.height() as f64,
-            s.image.width() as f64,
-            s.image.height() as f64,
+            s.preview_w,
+            s.preview_h,
         );
         let img_x = (x - vx) / scale;
         let img_y = (y - vy) / scale;
@@ -211,8 +233,8 @@ pub fn open_redact_annotate_modal(
         let (vx, vy, scale) = get_transform(
             canvas_release.width() as f64,
             canvas_release.height() as f64,
-            s.image.width() as f64,
-            s.image.height() as f64,
+            s.preview_w,
+            s.preview_h,
         );
         let img_x = (x - vx) / scale;
         let img_y = (y - vy) / scale;
@@ -300,8 +322,8 @@ pub fn open_redact_annotate_modal(
             let (vx, vy, scale) = get_transform(
                 canvas_motion.width() as f64,
                 canvas_motion.height() as f64,
-                s.image.width() as f64,
-                s.image.height() as f64,
+                s.preview_w,
+                s.preview_h,
             );
             s.current_x = (x - vx) / scale;
             s.current_y = (y - vy) / scale;
@@ -353,18 +375,70 @@ pub fn open_redact_annotate_modal(
     let on_success_rc = Rc::new(on_success);
     save_btn.connect_clicked(move |_| {
         let s = state_save.borrow();
-        let rendered = apply_redactions_and_annotations(&s.image, &s.redactions, &s.annotations);
-        let out_path = get_suffixed_output_path(&s.source_path, "Redacted", None);
-        let ext = out_path.extension().and_then(|e| e.to_str()).unwrap_or("png");
-        if let Ok(()) = save_image_with_format(&DynamicImage::ImageRgba8(rendered), &out_path, ext) {
-            let _ = ConfigManager::append_history("REDACT", &s.source_path, &out_path, None);
-            on_success_rc(out_path);
+        if let Ok(full_img) = load_image(&s.source_path) {
+            let scale_up = s.orig_w / s.preview_w;
+            let scaled_redactions: Vec<RedactionRegion> = s.redactions.iter().map(|r| {
+                RedactionRegion {
+                    x: ((r.x as f64) * scale_up).round() as u32,
+                    y: ((r.y as f64) * scale_up).round() as u32,
+                    width: ((r.width as f64) * scale_up).round().max(1.0) as u32,
+                    height: ((r.height as f64) * scale_up).round().max(1.0) as u32,
+                    kind: r.kind,
+                }
+            }).collect();
+
+            let scaled_annotations: Vec<AnnotationElement> = s.annotations.iter().map(|a| {
+                match a {
+                    AnnotationElement::Rectangle { x, y, width, height, color, stroke_width } => {
+                        AnnotationElement::Rectangle {
+                            x: ((*x as f64) * scale_up).round() as u32,
+                            y: ((*y as f64) * scale_up).round() as u32,
+                            width: ((*width as f64) * scale_up).round().max(1.0) as u32,
+                            height: ((*height as f64) * scale_up).round().max(1.0) as u32,
+                            color: *color,
+                            stroke_width: ((*stroke_width as f64) * scale_up).round().max(1.0) as u32,
+                        }
+                    }
+                    AnnotationElement::Arrow { x1, y1, x2, y2, color, stroke_width } => {
+                        AnnotationElement::Arrow {
+                            x1: ((*x1 as f64) * scale_up).round() as i32,
+                            y1: ((*y1 as f64) * scale_up).round() as i32,
+                            x2: ((*x2 as f64) * scale_up).round() as i32,
+                            y2: ((*y2 as f64) * scale_up).round() as i32,
+                            color: *color,
+                            stroke_width: ((*stroke_width as f64) * scale_up).round().max(1.0) as u32,
+                        }
+                    }
+                    AnnotationElement::TextCallout { x, y, text, color } => {
+                        AnnotationElement::TextCallout {
+                            x: ((*x as f64) * scale_up).round() as u32,
+                            y: ((*y as f64) * scale_up).round() as u32,
+                            text: text.clone(),
+                            color: *color,
+                        }
+                    }
+                }
+            }).collect();
+
+            let rendered = apply_redactions_and_annotations(&full_img, &scaled_redactions, &scaled_annotations);
+            let out_path = get_suffixed_output_path(&s.source_path, "Redacted", None);
+            let ext = out_path.extension().and_then(|e| e.to_str()).unwrap_or("png");
+            if let Ok(()) = save_image_with_format(&DynamicImage::ImageRgba8(rendered), &out_path, ext) {
+                let _ = ConfigManager::append_history("REDACT", &s.source_path, &out_path, None);
+                on_success_rc(out_path);
+            }
         }
         win_save.close();
+        crate::engine::trim_memory();
     });
     bottom_box.append(&save_btn);
 
     root_box.append(&bottom_box);
+
+    window.connect_destroy(move |_| {
+        crate::engine::trim_memory();
+    });
+
     window.set_child(Some(&root_box));
     window.present();
 }
@@ -382,12 +456,12 @@ fn draw_redact_canvas(cr: &Context, cw: f64, ch: f64, state: &StudioState) {
     cr.set_source_rgb(0.06, 0.06, 0.07);
     let _ = cr.paint();
 
-    let iw = state.image.width() as f64;
-    let ih = state.image.height() as f64;
+    let iw = state.preview_w;
+    let ih = state.preview_h;
     let (vx, vy, scale) = get_transform(cw, ch, iw, ih);
 
-    // Apply current committed redactions onto a rendered image
-    let rendered = apply_redactions_and_annotations(&state.image, &state.redactions, &state.annotations);
+    // Apply current committed redactions onto the preview image
+    let rendered = apply_redactions_and_annotations(&state.preview_img, &state.redactions, &state.annotations);
 
     let mut bgra = Vec::with_capacity((iw * ih * 4.0) as usize);
     for p in rendered.pixels() {

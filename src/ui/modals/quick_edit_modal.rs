@@ -10,10 +10,25 @@ use crate::engine::image_ops::{
 };
 use crate::engine::naming::get_suffixed_output_path;
 
+#[derive(Clone, Copy, Debug)]
+enum TransformOp {
+    Rotate90,
+    Rotate180,
+    FlipH,
+    FlipV,
+    Scale(f64),
+    AutoTrim,
+}
+
 struct EditState {
     source_path: PathBuf,
-    original_image: DynamicImage,
-    current_image: DynamicImage,
+    initial_preview: DynamicImage,
+    preview_image: DynamicImage,
+    orig_w: u32,
+    orig_h: u32,
+    cur_full_w: u32,
+    cur_full_h: u32,
+    ops: Vec<TransformOp>,
     brightness: i32,
     contrast: f32,
 }
@@ -32,11 +47,27 @@ pub fn open_quick_edit_modal(
     };
 
     let (init_w, init_h) = (img.width(), img.height());
+    let max_dim = (init_w.max(init_h) as f64).max(1.0);
+    let preview_scale = (720.0 / max_dim).min(1.0);
+    let preview_image = if preview_scale < 1.0 {
+        img.resize(
+            ((init_w as f64) * preview_scale).round() as u32,
+            ((init_h as f64) * preview_scale).round() as u32,
+            image::imageops::FilterType::Triangle,
+        )
+    } else {
+        img
+    };
 
     let state = Rc::new(RefCell::new(EditState {
         source_path: image_path.to_path_buf(),
-        original_image: img.clone(),
-        current_image: img,
+        initial_preview: preview_image.clone(),
+        preview_image,
+        orig_w: init_w,
+        orig_h: init_h,
+        cur_full_w: init_w,
+        cur_full_h: init_h,
+        ops: Vec::new(),
         brightness: 0,
         contrast: 0.0,
     }));
@@ -131,6 +162,11 @@ pub fn open_quick_edit_modal(
     title_lbl.set_halign(gtk4::Align::Start);
     sidebar.append(&title_lbl);
 
+    let dim_lbl = gtk4::Label::new(Some(&format!("{}×{} px", init_w, init_h)));
+    dim_lbl.add_css_class("hyprdrop-mono");
+    dim_lbl.set_hexpand(true);
+    dim_lbl.set_halign(gtk4::Align::End);
+
     // Rotation & Flip buttons
     let transform_lbl = gtk4::Label::new(Some("Orientation"));
     transform_lbl.add_css_class("hyprdrop-subtitle");
@@ -143,9 +179,15 @@ pub fn open_quick_edit_modal(
     rot90_btn.set_hexpand(true);
     let state_rot = state.clone();
     let canvas_rot = canvas.clone();
+    let dim_lbl_rot = dim_lbl.clone();
     rot90_btn.connect_clicked(move |_| {
         let mut s = state_rot.borrow_mut();
-        s.current_image = s.current_image.rotate90();
+        s.preview_image = s.preview_image.rotate90();
+        s.ops.push(TransformOp::Rotate90);
+        let tmp = s.cur_full_w;
+        s.cur_full_w = s.cur_full_h;
+        s.cur_full_h = tmp;
+        dim_lbl_rot.set_text(&format!("{}×{} px", s.cur_full_w, s.cur_full_h));
         drop(s);
         canvas_rot.queue_draw();
     });
@@ -158,7 +200,8 @@ pub fn open_quick_edit_modal(
     let canvas_rot180 = canvas.clone();
     rot180_btn.connect_clicked(move |_| {
         let mut s = state_rot180.borrow_mut();
-        s.current_image = s.current_image.rotate180();
+        s.preview_image = s.preview_image.rotate180();
+        s.ops.push(TransformOp::Rotate180);
         drop(s);
         canvas_rot180.queue_draw();
     });
@@ -173,7 +216,8 @@ pub fn open_quick_edit_modal(
     let canvas_fliph = canvas.clone();
     fliph_btn.connect_clicked(move |_| {
         let mut s = state_fliph.borrow_mut();
-        s.current_image = s.current_image.fliph();
+        s.preview_image = s.preview_image.fliph();
+        s.ops.push(TransformOp::FlipH);
         drop(s);
         canvas_fliph.queue_draw();
     });
@@ -186,7 +230,8 @@ pub fn open_quick_edit_modal(
     let canvas_flipv = canvas.clone();
     flipv_btn.connect_clicked(move |_| {
         let mut s = state_flipv.borrow_mut();
-        s.current_image = s.current_image.flipv();
+        s.preview_image = s.preview_image.flipv();
+        s.ops.push(TransformOp::FlipV);
         drop(s);
         canvas_flipv.queue_draw();
     });
@@ -197,10 +242,6 @@ pub fn open_quick_edit_modal(
     let resize_header = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
     let resize_lbl = gtk4::Label::new(Some("Quick Resize"));
     resize_lbl.add_css_class("hyprdrop-subtitle");
-    let dim_lbl = gtk4::Label::new(Some(&format!("{}×{} px", init_w, init_h)));
-    dim_lbl.add_css_class("hyprdrop-mono");
-    dim_lbl.set_hexpand(true);
-    dim_lbl.set_halign(gtk4::Align::End);
     resize_header.append(&resize_lbl);
     resize_header.append(&dim_lbl);
     sidebar.append(&resize_header);
@@ -221,10 +262,13 @@ pub fn open_quick_edit_modal(
         let dim_lbl_res = dim_lbl.clone();
         btn.connect_clicked(move |_| {
             let mut s = state_res.borrow_mut();
-            let new_w = ((s.current_image.width() as f64) * factor).round().max(16.0) as u32;
-            let new_h = ((s.current_image.height() as f64) * factor).round().max(16.0) as u32;
-            s.current_image = s.current_image.resize(new_w, new_h, image::imageops::FilterType::Lanczos3);
-            dim_lbl_res.set_text(&format!("{}×{} px", s.current_image.width(), s.current_image.height()));
+            let new_pw = ((s.preview_image.width() as f64) * factor).round().max(16.0) as u32;
+            let new_ph = ((s.preview_image.height() as f64) * factor).round().max(16.0) as u32;
+            s.preview_image = s.preview_image.resize(new_pw, new_ph, image::imageops::FilterType::Lanczos3);
+            s.ops.push(TransformOp::Scale(factor));
+            s.cur_full_w = ((s.cur_full_w as f64) * factor).round().max(16.0) as u32;
+            s.cur_full_h = ((s.cur_full_h as f64) * factor).round().max(16.0) as u32;
+            dim_lbl_res.set_text(&format!("{}×{} px", s.cur_full_w, s.cur_full_h));
             drop(s);
             canvas_res.queue_draw();
         });
@@ -241,9 +285,16 @@ pub fn open_quick_edit_modal(
     let dim_lbl_trim = dim_lbl.clone();
     trim_btn.connect_clicked(move |_| {
         let mut s = state_trim.borrow_mut();
-        let trimmed = auto_trim_transparent(&s.current_image.to_rgba8());
-        s.current_image = DynamicImage::ImageRgba8(trimmed);
-        dim_lbl_trim.set_text(&format!("{}×{} px", s.current_image.width(), s.current_image.height()));
+        let orig_pw = s.preview_image.width().max(1) as f64;
+        let orig_ph = s.preview_image.height().max(1) as f64;
+        let trimmed = auto_trim_transparent(&s.preview_image.to_rgba8());
+        let factor_w = trimmed.width() as f64 / orig_pw;
+        let factor_h = trimmed.height() as f64 / orig_ph;
+        s.preview_image = DynamicImage::ImageRgba8(trimmed);
+        s.ops.push(TransformOp::AutoTrim);
+        s.cur_full_w = ((s.cur_full_w as f64) * factor_w).round().max(1.0) as u32;
+        s.cur_full_h = ((s.cur_full_h as f64) * factor_h).round().max(1.0) as u32;
+        dim_lbl_trim.set_text(&format!("{}×{} px", s.cur_full_w, s.cur_full_h));
         drop(s);
         canvas_trim.queue_draw();
     });
@@ -309,12 +360,15 @@ pub fn open_quick_edit_modal(
     let dim_lbl_reset = dim_lbl.clone();
     reset_btn.connect_clicked(move |_| {
         let mut s = state_reset.borrow_mut();
-        s.current_image = s.original_image.clone();
+        s.preview_image = s.initial_preview.clone();
+        s.ops.clear();
+        s.cur_full_w = s.orig_w;
+        s.cur_full_h = s.orig_h;
         s.brightness = 0;
         s.contrast = 0.0;
         b_scale_reset.set_value(0.0);
         c_scale_reset.set_value(0.0);
-        dim_lbl_reset.set_text(&format!("{}×{} px", s.original_image.width(), s.original_image.height()));
+        dim_lbl_reset.set_text(&format!("{}×{} px", s.orig_w, s.orig_h));
         drop(s);
         canvas_reset.queue_draw();
     });
@@ -343,20 +397,45 @@ pub fn open_quick_edit_modal(
     let on_success_rc = Rc::new(on_success);
     save_btn.connect_clicked(move |_| {
         let s = state_save.borrow();
-        let final_img = adjust_brightness_contrast(&s.current_image, s.brightness, s.contrast);
-        let out_path = get_suffixed_output_path(&s.source_path, "Edited", None);
-        let ext = out_path.extension().and_then(|e| e.to_str()).unwrap_or("png");
-        if let Ok(()) = save_image_with_format(&final_img, &out_path, ext) {
-            let _ = ConfigManager::append_history("QUICK EDIT", &s.source_path, &out_path, None);
-            on_success_rc(out_path);
+        if let Ok(mut full_img) = load_image(&s.source_path) {
+            for op in &s.ops {
+                match op {
+                    TransformOp::Rotate90 => full_img = full_img.rotate90(),
+                    TransformOp::Rotate180 => full_img = full_img.rotate180(),
+                    TransformOp::FlipH => full_img = full_img.fliph(),
+                    TransformOp::FlipV => full_img = full_img.flipv(),
+                    TransformOp::Scale(factor) => {
+                        let nw = ((full_img.width() as f64) * factor).round().max(16.0) as u32;
+                        let nh = ((full_img.height() as f64) * factor).round().max(16.0) as u32;
+                        full_img = full_img.resize(nw, nh, image::imageops::FilterType::Lanczos3);
+                    }
+                    TransformOp::AutoTrim => {
+                        let trimmed = auto_trim_transparent(&full_img.to_rgba8());
+                        full_img = DynamicImage::ImageRgba8(trimmed);
+                    }
+                }
+            }
+            let final_img = adjust_brightness_contrast(&full_img, s.brightness, s.contrast);
+            let out_path = get_suffixed_output_path(&s.source_path, "Edited", None);
+            let ext = out_path.extension().and_then(|e| e.to_str()).unwrap_or("png");
+            if let Ok(()) = save_image_with_format(&final_img, &out_path, ext) {
+                let _ = ConfigManager::append_history("QUICK EDIT", &s.source_path, &out_path, None);
+                on_success_rc(out_path);
+            }
         }
         win_save.close();
+        crate::engine::trim_memory();
     });
     act_row.append(&save_btn);
     sidebar.append(&act_row);
 
     body_box.append(&sidebar);
     root_box.append(&body_box);
+
+    window.connect_destroy(move |_| {
+        crate::engine::trim_memory();
+    });
+
     window.set_child(Some(&root_box));
     window.present();
 }
@@ -365,7 +444,7 @@ fn draw_edit_canvas(cr: &Context, cw: f64, ch: f64, state: &EditState) {
     cr.set_source_rgb(0.06, 0.06, 0.07);
     let _ = cr.paint();
 
-    let adjusted = adjust_brightness_contrast(&state.current_image, state.brightness, state.contrast);
+    let adjusted = adjust_brightness_contrast(&state.preview_image, state.brightness, state.contrast);
     let iw = adjusted.width() as f64;
     let ih = adjusted.height() as f64;
 

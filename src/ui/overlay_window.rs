@@ -275,6 +275,7 @@ impl OverlayWindow {
                     }
                 }
             });
+            crate::engine::trim_memory();
         });
 
         ACTIVE_OVERLAY.with(|cell| {

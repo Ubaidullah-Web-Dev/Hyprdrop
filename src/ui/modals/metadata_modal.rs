@@ -152,6 +152,11 @@ pub fn open_metadata_modal(
     bottom_box.append(&strip_btn);
 
     root_box.append(&bottom_box);
+
+    window.connect_destroy(move |_| {
+        crate::engine::trim_memory();
+    });
+
     window.set_child(Some(&root_box));
     window.present();
 }

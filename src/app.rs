@@ -69,6 +69,7 @@ impl HyprdropApp {
 
         app.connect_startup(|_| {
             init_css_theme();
+            crate::engine::trim_memory();
         });
 
         app.connect_shutdown(|_| {
@@ -135,9 +136,15 @@ impl HyprdropApp {
 
         let app_timer = app.clone();
         let listener_timer = listener.clone();
+        let mut ticks = 0u64;
 
         // 30ms polling interval for ultra-low latency response
         glib::timeout_add_local(Duration::from_millis(30), move || {
+            ticks = ticks.wrapping_add(1);
+            if ticks.is_multiple_of(300) {
+                // Periodically trim heap memory back to OS kernel (~every 9s)
+                crate::engine::trim_memory();
+            }
             let l = listener_timer.borrow();
             while let Some(msg) = IpcServer::try_recv(&l) {
                 match msg {

@@ -94,6 +94,10 @@ impl SettingsApp {
 
         root_box.append(&notebook);
 
+        window.connect_destroy(move |_| {
+            crate::engine::trim_memory();
+        });
+
         window.set_child(Some(&root_box));
         window.present();
     }

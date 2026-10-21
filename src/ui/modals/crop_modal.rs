@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use gtk4::cairo::Context;
 use gtk4::prelude::*;
-use image::DynamicImage;
+
 use crate::config::ConfigManager;
 use crate::engine::image_ops::{crop_image, load_image, save_image_with_format};
 use crate::engine::naming::get_suffixed_output_path;
@@ -47,8 +47,11 @@ enum DragHandle {
 
 struct CropState {
     source_path: PathBuf,
-    image: DynamicImage,
-    bgra_cache: Vec<u8>,
+    preview_surface: cairo::ImageSurface,
+    preview_w: f64,
+    preview_h: f64,
+    orig_w: f64,
+    orig_h: f64,
     preset: AspectPreset,
     crop_x: f64,
     crop_y: f64,
@@ -83,19 +86,43 @@ pub fn open_crop_modal(
     let init_x = (orig_w - init_w) / 2.0;
     let init_y = (orig_h - init_h) / 2.0;
 
-    let rgba = img.to_rgba8();
-    let mut bgra_cache = Vec::with_capacity((orig_w * orig_h * 4.0) as usize);
+    let max_dim = orig_w.max(orig_h);
+    let preview_scale = (800.0 / max_dim).min(1.0);
+    let preview_img = if preview_scale < 1.0 {
+        img.resize(
+            (orig_w * preview_scale).round() as u32,
+            (orig_h * preview_scale).round() as u32,
+            image::imageops::FilterType::Triangle,
+        )
+    } else {
+        img
+    };
+
+    let preview_w = preview_img.width() as f64;
+    let preview_h = preview_img.height() as f64;
+    let rgba = preview_img.to_rgba8();
+    let mut bgra = Vec::with_capacity((preview_w * preview_h * 4.0) as usize);
     for p in rgba.pixels() {
-        bgra_cache.push(p[2]);
-        bgra_cache.push(p[1]);
-        bgra_cache.push(p[0]);
-        bgra_cache.push(p[3]);
+        bgra.push(p[2]);
+        bgra.push(p[1]);
+        bgra.push(p[0]);
+        bgra.push(p[3]);
     }
+    let preview_surface = cairo::ImageSurface::create_for_data(
+        bgra,
+        cairo::Format::ARgb32,
+        preview_w as i32,
+        preview_h as i32,
+        cairo::Format::ARgb32.stride_for_width(preview_w as u32).unwrap_or(preview_w as i32 * 4),
+    ).expect("Failed to create preview surface");
 
     let state = Rc::new(RefCell::new(CropState {
         source_path: image_path.to_path_buf(),
-        image: img,
-        bgra_cache,
+        preview_surface,
+        preview_w,
+        preview_h,
+        orig_w,
+        orig_h,
         preset: AspectPreset::Free,
         crop_x: init_x,
         crop_y: init_y,
@@ -238,8 +265,8 @@ pub fn open_crop_modal(
         let (view_x, view_y, scale) = get_canvas_transform(
             canvas_click.width() as f64,
             canvas_click.height() as f64,
-            s.image.width() as f64,
-            s.image.height() as f64,
+            s.orig_w,
+            s.orig_h,
         );
 
         let img_x = (x - view_x) / scale;
@@ -283,16 +310,16 @@ pub fn open_crop_modal(
         let (view_x, view_y, scale) = get_canvas_transform(
             canvas_motion.width() as f64,
             canvas_motion.height() as f64,
-            s.image.width() as f64,
-            s.image.height() as f64,
+            s.orig_w,
+            s.orig_h,
         );
 
         let img_x = (x - view_x) / scale;
         let img_y = (y - view_y) / scale;
         let dx = img_x - s.drag_start_x;
         let dy = img_y - s.drag_start_y;
-        let img_w = s.image.width() as f64;
-        let img_h = s.image.height() as f64;
+        let img_w = s.orig_w;
+        let img_h = s.orig_h;
 
         update_crop_rect(&mut s, dx, dy, img_w, img_h);
         let cur_w = s.crop_w.round();
@@ -317,10 +344,10 @@ pub fn open_crop_modal(
         if s.is_dragging {
             return;
         }
-        let max_w = s.image.width() as f64 - s.crop_x;
+        let max_w = s.orig_w - s.crop_x;
         s.crop_w = spin.value().clamp(20.0, max_w);
         if let Some(ratio) = s.preset.ratio() {
-            let max_h = s.image.height() as f64 - s.crop_y;
+            let max_h = s.orig_h - s.crop_y;
             s.crop_h = (s.crop_w / ratio).clamp(20.0, max_h);
             h_spin_w.set_value(s.crop_h.round());
         }
@@ -336,10 +363,10 @@ pub fn open_crop_modal(
         if s.is_dragging {
             return;
         }
-        let max_h = s.image.height() as f64 - s.crop_y;
+        let max_h = s.orig_h - s.crop_y;
         s.crop_h = spin.value().clamp(20.0, max_h);
         if let Some(ratio) = s.preset.ratio() {
-            let max_w = s.image.width() as f64 - s.crop_x;
+            let max_w = s.orig_w - s.crop_x;
             s.crop_w = (s.crop_h * ratio).clamp(20.0, max_w);
             w_spin_h.set_value(s.crop_w.round());
         }
@@ -366,7 +393,7 @@ pub fn open_crop_modal(
             s.preset = preset_val;
             if let Some(ratio) = preset_val.ratio() {
                 // Adjust crop_h to match ratio
-                let max_h = s.image.height() as f64 - s.crop_y;
+                let max_h = s.orig_h - s.crop_y;
                 let target_h = (s.crop_w / ratio).min(max_h);
                 s.crop_h = target_h.max(20.0);
                 h_spin_p.set_value(s.crop_h.round());
@@ -391,7 +418,7 @@ pub fn open_crop_modal(
     let h_spin_reset = h_spin.clone();
     reset_btn.connect_clicked(move |_| {
         let mut s = state_reset.borrow_mut();
-        let (orig_w, orig_h) = (s.image.width() as f64, s.image.height() as f64);
+        let (orig_w, orig_h) = (s.orig_w, s.orig_h);
         s.crop_w = orig_w * 0.8;
         s.crop_h = orig_h * 0.8;
         s.crop_x = (orig_w - s.crop_w) / 2.0;
@@ -422,25 +449,33 @@ pub fn open_crop_modal(
     let on_success_rc = Rc::new(on_success);
     apply_btn.connect_clicked(move |_| {
         let s = state_apply.borrow();
-        let cropped = crop_image(
-            &s.image,
-            s.crop_x.round() as u32,
-            s.crop_y.round() as u32,
-            s.crop_w.round() as u32,
-            s.crop_h.round() as u32,
-        );
+        if let Ok(full_img) = load_image(&s.source_path) {
+            let cropped = crop_image(
+                &full_img,
+                s.crop_x.round() as u32,
+                s.crop_y.round() as u32,
+                s.crop_w.round() as u32,
+                s.crop_h.round() as u32,
+            );
 
-        let out_path = get_suffixed_output_path(&s.source_path, "Cropped", None);
-        let ext = out_path.extension().and_then(|e| e.to_str()).unwrap_or("png");
-        if let Ok(()) = save_image_with_format(&cropped, &out_path, ext) {
-            let _ = ConfigManager::append_history("CROP", &s.source_path, &out_path, None);
-            on_success_rc(out_path);
+            let out_path = get_suffixed_output_path(&s.source_path, "Cropped", None);
+            let ext = out_path.extension().and_then(|e| e.to_str()).unwrap_or("png");
+            if let Ok(()) = save_image_with_format(&cropped, &out_path, ext) {
+                let _ = ConfigManager::append_history("CROP", &s.source_path, &out_path, None);
+                on_success_rc(out_path);
+            }
         }
         win_apply.close();
+        crate::engine::trim_memory();
     });
     bottom_box.append(&apply_btn);
 
     root_box.append(&bottom_box);
+
+    window.connect_destroy(move |_| {
+        crate::engine::trim_memory();
+    });
+
     window.set_child(Some(&root_box));
     window.present();
 }
@@ -540,31 +575,21 @@ fn update_crop_rect(s: &mut CropState, dx: f64, dy: f64, img_w: f64, img_h: f64)
 }
 
 fn draw_crop_canvas(cr: &Context, canvas_w: f64, canvas_h: f64, state: &CropState) {
-    let img_w = state.image.width() as f64;
-    let img_h = state.image.height() as f64;
-    let (vx, vy, scale) = get_canvas_transform(canvas_w, canvas_h, img_w, img_h);
+    let (vx, vy, scale) = get_canvas_transform(canvas_w, canvas_h, state.orig_w, state.orig_h);
 
     // Dark void canvas background
     cr.set_source_rgb(0.05, 0.05, 0.06);
     let _ = cr.paint();
 
-    // Draw scaled image using cached BGRA
-    let bgra = state.bgra_cache.clone();
-
-    if let Ok(surface) = cairo::ImageSurface::create_for_data(
-        bgra,
-        cairo::Format::ARgb32,
-        img_w as i32,
-        img_h as i32,
-        cairo::Format::ARgb32.stride_for_width(img_w as u32).unwrap_or(img_w as i32 * 4),
-    ) {
-        cr.save().ok();
-        cr.translate(vx, vy);
-        cr.scale(scale, scale);
-        let _ = cr.set_source_surface(&surface, 0.0, 0.0);
-        let _ = cr.paint();
-        cr.restore().ok();
-    }
+    // Draw scaled preview surface
+    cr.save().ok();
+    cr.translate(vx, vy);
+    let surf_scale_x = (state.orig_w * scale) / state.preview_w;
+    let surf_scale_y = (state.orig_h * scale) / state.preview_h;
+    cr.scale(surf_scale_x, surf_scale_y);
+    let _ = cr.set_source_surface(&state.preview_surface, 0.0, 0.0);
+    let _ = cr.paint();
+    cr.restore().ok();
 
     // Screen coordinates for crop box
     let scx = vx + state.crop_x * scale;
@@ -575,13 +600,13 @@ fn draw_crop_canvas(cr: &Context, canvas_w: f64, canvas_h: f64, state: &CropStat
     // Darkened exterior mask (rgba(0, 0, 0, 0.65))
     cr.set_source_rgba(0.0, 0.0, 0.0, 0.65);
     // Top
-    cr.rectangle(vx, vy, img_w * scale, (scy - vy).max(0.0));
+    cr.rectangle(vx, vy, state.orig_w * scale, (scy - vy).max(0.0));
     // Bottom
-    cr.rectangle(vx, scy + sch, img_w * scale, (vy + img_h * scale - (scy + sch)).max(0.0));
+    cr.rectangle(vx, scy + sch, state.orig_w * scale, (vy + state.orig_h * scale - (scy + sch)).max(0.0));
     // Left
     cr.rectangle(vx, scy, (scx - vx).max(0.0), sch);
     // Right
-    cr.rectangle(scx + scw, scy, (vx + img_w * scale - (scx + scw)).max(0.0), sch);
+    cr.rectangle(scx + scw, scy, (vx + state.orig_w * scale - (scx + scw)).max(0.0), sch);
     let _ = cr.fill();
 
     // Rule-of-thirds gridlines

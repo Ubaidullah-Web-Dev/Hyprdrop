@@ -8,6 +8,14 @@ pub mod ocr_clipboard;
 pub mod pdf_ops;
 pub mod redact_annotate;
 
+/// Compacts and returns unused heap memory back to the operating system kernel.
+pub fn trim_memory() {
+    #[cfg(target_os = "linux")]
+    unsafe {
+        libc::malloc_trim(0);
+    }
+}
+
 use std::path::{Path, PathBuf};
 use anyhow::{Result, anyhow};
 use crate::engine::archive_ops::{create_tar_gz, create_tar_zst, create_zip, extract_archive};
