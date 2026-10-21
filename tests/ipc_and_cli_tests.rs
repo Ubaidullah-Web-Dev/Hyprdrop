@@ -47,12 +47,14 @@ fn test_cli_direct_file_argument() {
 fn test_ipc_message_serialization() {
     let msg1 = IpcMessage::Trigger {
         file: Some(PathBuf::from("/tmp/test.png")),
+        files: Some(vec![PathBuf::from("/tmp/test.png")]),
     };
     let json1 = serde_json::to_string(&msg1).expect("Failed to serialize");
     let deser1: IpcMessage = serde_json::from_str(&json1).expect("Failed to deserialize");
     match deser1 {
-        IpcMessage::Trigger { file } => {
+        IpcMessage::Trigger { file, files } => {
             assert_eq!(file, Some(PathBuf::from("/tmp/test.png")));
+            assert_eq!(files, Some(vec![PathBuf::from("/tmp/test.png")]));
         }
         _ => panic!("Wrong variant"),
     }

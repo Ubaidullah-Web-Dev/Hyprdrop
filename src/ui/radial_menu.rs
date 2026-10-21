@@ -353,14 +353,23 @@ impl RadialMenu {
             _ => {
                 // Default center: File size, Multiple files count, or Drop prompt
                 let (main_text, sub_override) = match state.current_files.len() {
-                    0 => ("HYPRDROP".to_string(), None),
+                    0 => ("HYPRDROP".to_string(), Some("DROP FILE".to_string())),
                     1 => {
                         let path = &state.current_files[0];
                         let sz = match std::fs::metadata(path) {
                             Ok(meta) => format_file_size(meta.len()),
                             Err(_) => "FILE".to_string(),
                         };
-                        (sz, None)
+                        let file_name = path
+                            .file_name()
+                            .and_then(|n| n.to_str())
+                            .unwrap_or("");
+                        let display_name = if file_name.len() > 11 {
+                            format!("{}…", &file_name[..9])
+                        } else {
+                            file_name.to_string()
+                        };
+                        (sz, Some(display_name))
                     }
                     n => {
                         let total_bytes: u64 = state

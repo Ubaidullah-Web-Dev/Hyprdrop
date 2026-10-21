@@ -8,7 +8,12 @@ use crate::config::ConfigManager;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "action", rename_all = "snake_case")]
 pub enum IpcMessage {
-    Trigger { file: Option<PathBuf> },
+    Trigger {
+        #[serde(default)]
+        file: Option<PathBuf>,
+        #[serde(default)]
+        files: Option<Vec<PathBuf>>,
+    },
     Toggle,
     Settings,
     Ping,

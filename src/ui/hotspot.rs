@@ -25,12 +25,11 @@ impl HotspotWindow {
         let window = gtk4::ApplicationWindow::builder()
             .application(app)
             .title("Hyprdrop Edge Hotspot")
-            .default_width(8)
-            .default_height(180)
+            .default_width(28)
+            .default_height(260)
             .resizable(false)
             .decorated(false)
             .build();
-
 
         window.add_css_class("hyprdrop-hotspot");
 
@@ -45,16 +44,31 @@ impl HotspotWindow {
         window.set_anchor(Edge::Left, false);
         window.set_margin(Edge::Right, 0);
 
+        let container = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
+        container.set_halign(gtk4::Align::End);
+        container.set_valign(gtk4::Align::Center);
+
         let bar = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
-        bar.set_size_request(8, 180);
+        bar.set_size_request(14, 240);
         bar.add_css_class("hyprdrop-hotspot-bar");
-        bar.set_tooltip_text(Some("Hyprdrop Hotspot — Drag files here to trigger radial menu"));
+        bar.set_tooltip_text(Some("Hyprdrop — Drag files here to convert or edit"));
+        bar.set_valign(gtk4::Align::Center);
+
+        let indicator = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
+        indicator.set_size_request(3, 80);
+        indicator.set_valign(gtk4::Align::Center);
+        indicator.set_halign(gtk4::Align::Center);
+        indicator.add_css_class("hyprdrop-hotspot-indicator");
+        bar.append(&indicator);
+
+        container.append(&bar);
 
         // Drop target on hotspot
         let drop_target = gtk4::DropTarget::new(
             glib::types::Type::INVALID,
             gdk::DragAction::COPY | gdk::DragAction::MOVE,
         );
+        drop_target.set_preload(true);
         drop_target.set_types(&[
             gdk::FileList::static_type(),
             gtk4::gio::File::static_type(),
@@ -98,7 +112,19 @@ impl HotspotWindow {
         });
         window.add_controller(click);
 
-        window.set_child(Some(&bar));
+        // Motion controller to guarantee visual hover feedback
+        let motion = gtk4::EventControllerMotion::new();
+        let bar_motion = bar.clone();
+        motion.connect_enter(move |_, _, _| {
+            bar_motion.add_css_class("hovered");
+        });
+        let bar_motion_leave = bar.clone();
+        motion.connect_leave(move |_| {
+            bar_motion_leave.remove_css_class("hovered");
+        });
+        window.add_controller(motion);
+
+        window.set_child(Some(&container));
 
         let win_weak = window.downgrade();
         window.connect_destroy(move |_| {

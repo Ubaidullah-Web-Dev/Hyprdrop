@@ -18,15 +18,33 @@ impl HyprdropApp {
         if !cli.daemon {
             let msg = if let Some(ref cmd) = cli.command {
                 match cmd {
-                    Commands::Trigger { file } => Some(IpcMessage::Trigger {
-                        file: file.clone().or_else(|| cli.file.clone()),
-                    }),
+                    Commands::Trigger { file } => {
+                        let explicit = file.clone().or_else(|| cli.file.clone());
+                        let files = if let Some(ref f) = explicit {
+                            vec![f.clone()]
+                        } else {
+                            crate::ui::overlay_window::detect_selected_files()
+                        };
+                        Some(IpcMessage::Trigger {
+                            file: files.first().cloned(),
+                            files: Some(files),
+                        })
+                    }
                     Commands::Toggle => Some(IpcMessage::Toggle),
                     Commands::Settings => Some(IpcMessage::Settings),
                 }
-            } else { cli.file.as_ref().map(|file| IpcMessage::Trigger {
-                    file: Some(file.clone()),
-                }) };
+            } else {
+                let explicit = cli.file.clone();
+                let files = if let Some(ref f) = explicit {
+                    vec![f.clone()]
+                } else {
+                    crate::ui::overlay_window::detect_selected_files()
+                };
+                Some(IpcMessage::Trigger {
+                    file: files.first().cloned(),
+                    files: Some(files),
+                })
+            };
 
             if let Some(ref m) = msg
                 && let Ok(true) = IpcClient::send(m) {
@@ -113,8 +131,16 @@ impl HyprdropApp {
             let l = listener_timer.borrow();
             while let Some(msg) = IpcServer::try_recv(&l) {
                 match msg {
-                    IpcMessage::Trigger { file } => {
-                        OverlayWindow::spawn(&app_timer, file);
+                    IpcMessage::Trigger { file, files } => {
+                        let mut targets = files.unwrap_or_default();
+                        if targets.is_empty() {
+                            if let Some(f) = file {
+                                targets.push(f);
+                            } else {
+                                targets = crate::ui::overlay_window::detect_selected_files();
+                            }
+                        }
+                        OverlayWindow::spawn_with_files(&app_timer, targets);
                     }
                     IpcMessage::Toggle => {
                         OverlayWindow::toggle(&app_timer, None);

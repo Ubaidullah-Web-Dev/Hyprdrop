@@ -1,4 +1,6 @@
+use std::cell::RefCell;
 use std::path::PathBuf;
+use std::process::Command;
 use std::rc::Rc;
 use gtk4::gdk;
 use gtk4::gio;
@@ -18,18 +20,24 @@ use crate::ui::modals::{
 };
 use crate::ui::radial_menu::{HitZone, INNER_RADIUS, OUTER_RADIUS, RADIAL_SIZE, RadialMenu, RadialMode, hit_test};
 
+thread_local! {
+    static ACTIVE_OVERLAY: RefCell<Option<gtk4::ApplicationWindow>> = const { RefCell::new(None) };
+}
+
 pub struct OverlayWindow;
 
 impl OverlayWindow {
     /// Checks whether an overlay window is currently open.
-    pub fn is_open(app: &gtk4::Application) -> bool {
-        app.windows().iter().any(|w| {
-            w.has_css_class("hyprdrop-overlay") || w.title().as_deref() == Some("Hyprdrop Overlay")
-        })
+    pub fn is_open(_app: &gtk4::Application) -> bool {
+        ACTIVE_OVERLAY.with(|cell| cell.borrow().is_some())
     }
 
     /// Closes all active overlay windows.
     pub fn close_all(app: &gtk4::Application) {
+        let win_opt = ACTIVE_OVERLAY.with(|cell| cell.borrow_mut().take());
+        if let Some(win) = win_opt {
+            win.close();
+        }
         for w in app.windows() {
             if w.has_css_class("hyprdrop-overlay") || w.title().as_deref() == Some("Hyprdrop Overlay") {
                 w.close();
@@ -54,6 +62,8 @@ impl OverlayWindow {
 
     /// Spawns the overlay window with a list of preloaded files (multi-file drop support).
     pub fn spawn_with_files(app: &gtk4::Application, preloaded_files: Vec<PathBuf>) {
+        Self::close_all(app);
+
         let window = gtk4::ApplicationWindow::builder()
             .application(app)
             .title("Hyprdrop Overlay")
@@ -66,9 +76,9 @@ impl OverlayWindow {
         window.add_css_class("hyprdrop-overlay");
         configure_layer_shell_window(&window, RADIAL_SIZE, RADIAL_SIZE, None);
 
-        // Auto-detect selected file from Wayland primary clipboard if no explicit file was passed
+        // Auto-detect selected files if no explicit file was passed
         let effective_files = if preloaded_files.is_empty() {
-            detect_selected_file().map(|f| vec![f]).unwrap_or_default()
+            detect_selected_files()
         } else {
             preloaded_files
         };
@@ -134,6 +144,7 @@ impl OverlayWindow {
             glib::types::Type::INVALID,
             gdk::DragAction::COPY | gdk::DragAction::MOVE,
         );
+        drop_target.set_preload(true);
         drop_target.set_types(&[
             gdk::FileList::static_type(),
             gio::File::static_type(),
@@ -194,7 +205,7 @@ impl OverlayWindow {
                 }
             }
         });
-        window.add_controller(drop_target);
+        radial.widget.add_controller(drop_target);
 
         // Keyboard Controls
         let key_controller = gtk4::EventControllerKey::new();
@@ -249,67 +260,192 @@ impl OverlayWindow {
         window.add_controller(key_controller);
 
         window.set_child(Some(&radial.widget));
+
+        let win_weak = window.downgrade();
+        window.connect_destroy(move |_| {
+            ACTIVE_OVERLAY.with(|cell| {
+                if let Ok(mut opt) = cell.try_borrow_mut()
+                    && let Some(ref w) = *opt
+                {
+                    if let Some(curr) = win_weak.upgrade() {
+                        if w == &curr {
+                            *opt = None;
+                        }
+                    } else {
+                        *opt = None;
+                    }
+                }
+            });
+        });
+
+        ACTIVE_OVERLAY.with(|cell| {
+            *cell.borrow_mut() = Some(window.clone());
+        });
+
         window.present();
     }
 }
 
-/// Auto-detects a selected file from Wayland primary clipboard (`wl-paste -p`) or standard clipboard.
+/// Auto-detects selected files from active file manager, clipboard (URIs, paths, raw images),
+/// or Wayland primary selection.
+pub fn detect_selected_files() -> Vec<PathBuf> {
+    let mut files = Vec::new();
+
+    // 1. If a file manager is currently focused (Thunar, Nautilus, Dolphin, Nemo, PCManFM),
+    // trigger a fast Ctrl+C via wtype to copy the current selection into the Wayland clipboard.
+    if is_file_manager_focused() {
+        let _ = Command::new("wtype")
+            .args(["-M", "ctrl", "-k", "c", "-m", "ctrl"])
+            .output();
+        // Brief yield for the Wayland clipboard transfer to complete
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+
+    // 2. Try to read text/uri-list from standard clipboard (standard file manager copy format)
+    if let Ok(output) = Command::new("wl-paste")
+        .args(["-t", "text/uri-list"])
+        .output()
+        && output.status.success() {
+        let text = String::from_utf8_lossy(&output.stdout);
+        for line in text.lines() {
+            let trimmed = line.trim();
+            if trimmed.is_empty() || trimmed.starts_with('#') {
+                continue;
+            }
+            if let Ok((p, _)) = glib::filename_from_uri(trimmed) {
+                if p.exists() {
+                    files.push(p);
+                }
+            } else if let Some(stripped) = trimmed.strip_prefix("file://") {
+                let p = PathBuf::from(stripped);
+                if p.exists() {
+                    files.push(p);
+                }
+            }
+        }
+        if !files.is_empty() {
+            return files;
+        }
+    }
+
+    // 3. Try to read x-special/gnome-copied-files (GNOME/Nautilus/Thunar format)
+    if let Ok(output) = Command::new("wl-paste")
+        .args(["-t", "x-special/gnome-copied-files"])
+        .output()
+        && output.status.success() {
+        let text = String::from_utf8_lossy(&output.stdout);
+        for line in text.lines() {
+            let trimmed = line.trim();
+            if trimmed == "copy" || trimmed == "cut" || trimmed.is_empty() {
+                continue;
+            }
+            if let Ok((p, _)) = glib::filename_from_uri(trimmed) {
+                if p.exists() {
+                    files.push(p);
+                }
+            } else if let Some(stripped) = trimmed.strip_prefix("file://") {
+                let p = PathBuf::from(stripped);
+                if p.exists() {
+                    files.push(p);
+                }
+            }
+        }
+        if !files.is_empty() {
+            return files;
+        }
+    }
+
+    // 4. Try standard clipboard text (wl-paste)
+    if let Ok(output) = Command::new("wl-paste").output()
+        && output.status.success() {
+        let text = String::from_utf8_lossy(&output.stdout);
+        for line in text.lines() {
+            let trimmed = line.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+            if let Ok((p, _)) = glib::filename_from_uri(trimmed) {
+                if p.exists() {
+                    files.push(p);
+                }
+            } else if let Some(stripped) = trimmed.strip_prefix("file://") {
+                let p = PathBuf::from(stripped);
+                if p.exists() {
+                    files.push(p);
+                }
+            } else {
+                let p = PathBuf::from(trimmed);
+                if p.exists() && p.is_file() {
+                    files.push(p);
+                }
+            }
+        }
+        if !files.is_empty() {
+            return files;
+        }
+    }
+
+    // 5. Try Wayland primary selection (wl-paste -p) for highlighted file paths
+    if let Ok(output) = Command::new("wl-paste").arg("-p").output()
+        && output.status.success() {
+        let text = String::from_utf8_lossy(&output.stdout);
+        for line in text.lines() {
+            let trimmed = line.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+            if let Ok((p, _)) = glib::filename_from_uri(trimmed) {
+                if p.exists() {
+                    files.push(p);
+                }
+            } else if let Some(stripped) = trimmed.strip_prefix("file://") {
+                let p = PathBuf::from(stripped);
+                if p.exists() {
+                    files.push(p);
+                }
+            } else {
+                let p = PathBuf::from(trimmed);
+                if p.exists() && p.is_file() {
+                    files.push(p);
+                }
+            }
+        }
+        if !files.is_empty() {
+            return files;
+        }
+    }
+
+    Vec::new()
+}
+
+/// Auto-detects a single selected file.
 pub fn detect_selected_file() -> Option<PathBuf> {
-    // 1. Try to read from Wayland primary selection (clicked / highlighted file URI or path)
-    if let Ok(output) = std::process::Command::new("wl-paste").arg("-p").output()
-        && output.status.success() {
-        let text = String::from_utf8_lossy(&output.stdout);
-        for line in text.lines() {
-            let trimmed = line.trim();
-            if trimmed.is_empty() {
-                continue;
-            }
-            if let Ok((p, _)) = glib::filename_from_uri(trimmed) {
-                if p.exists() && p.is_file() {
-                    return Some(p);
-                }
-            } else if let Some(stripped) = trimmed.strip_prefix("file://") {
-                let p = PathBuf::from(stripped);
-                if p.exists() && p.is_file() {
-                    return Some(p);
-                }
-            } else {
-                let p = PathBuf::from(trimmed);
-                if p.exists() && p.is_file() {
-                    return Some(p);
-                }
-            }
-        }
-    }
+    detect_selected_files().into_iter().next()
+}
 
-    // 2. Try to read from standard clipboard (wl-paste)
-    if let Ok(output) = std::process::Command::new("wl-paste").output()
-        && output.status.success() {
-        let text = String::from_utf8_lossy(&output.stdout);
-        for line in text.lines() {
-            let trimmed = line.trim();
-            if trimmed.is_empty() {
-                continue;
-            }
-            if let Ok((p, _)) = glib::filename_from_uri(trimmed) {
-                if p.exists() && p.is_file() {
-                    return Some(p);
-                }
-            } else if let Some(stripped) = trimmed.strip_prefix("file://") {
-                let p = PathBuf::from(stripped);
-                if p.exists() && p.is_file() {
-                    return Some(p);
-                }
-            } else {
-                let p = PathBuf::from(trimmed);
-                if p.exists() && p.is_file() {
-                    return Some(p);
-                }
-            }
-        }
+fn is_file_manager_focused() -> bool {
+    let Ok(output) = Command::new("hyprctl")
+        .args(["activewindow", "-j"])
+        .output() else {
+        return false;
+    };
+    if !output.status.success() {
+        return false;
     }
-
-    None
+    let Ok(v) = serde_json::from_slice::<serde_json::Value>(&output.stdout) else {
+        return false;
+    };
+    let class = v.get("class").and_then(|c| c.as_str()).unwrap_or("").to_lowercase();
+    let title = v.get("title").and_then(|t| t.as_str()).unwrap_or("").to_lowercase();
+    class.contains("thunar")
+        || class.contains("nautilus")
+        || class.contains("dolphin")
+        || class.contains("nemo")
+        || class.contains("pcmanfm")
+        || class.contains("caja")
+        || title.ends_with("- thunar")
+        || title.ends_with("- dolphin")
+        || title.ends_with("- files")
 }
 
 /// Robustly extracts local filesystem paths from a GTK DropTarget value.
