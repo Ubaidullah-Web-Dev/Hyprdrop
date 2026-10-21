@@ -25,8 +25,8 @@ impl HotspotWindow {
         let window = gtk4::ApplicationWindow::builder()
             .application(app)
             .title("Hyprdrop Edge Hotspot")
-            .default_width(72)
-            .default_height(360)
+            .default_width(12)
+            .default_height(220)
             .resizable(false)
             .decorated(false)
             .build();
@@ -44,18 +44,12 @@ impl HotspotWindow {
         window.set_anchor(Edge::Left, false);
         window.set_margin(Edge::Right, 0);
 
-        let container = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
-        container.set_halign(gtk4::Align::End);
-        container.set_valign(gtk4::Align::Center);
-        container.set_margin_top(36);
-        container.set_margin_bottom(36);
-        container.set_margin_start(36);
-
         let bar = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
         bar.set_size_request(6, 220);
+        bar.set_halign(gtk4::Align::End);
+        bar.set_valign(gtk4::Align::Center);
         bar.add_css_class("hyprdrop-hotspot-bar");
         bar.set_tooltip_text(Some("Hyprdrop — Drag files here to convert or edit"));
-        bar.set_valign(gtk4::Align::Center);
 
         let indicator = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
         indicator.set_size_request(2, -1);
@@ -66,9 +60,7 @@ impl HotspotWindow {
         indicator.add_css_class("hyprdrop-hotspot-indicator");
         bar.append(&indicator);
 
-        container.append(&bar);
-
-        // Drop target on hotspot
+        // Drop target on hotspot bar
         let drop_target = gtk4::DropTarget::new(
             glib::types::Type::INVALID,
             gdk::DragAction::COPY | gdk::DragAction::MOVE,
@@ -91,11 +83,13 @@ impl HotspotWindow {
         let bar_leave = bar.clone();
         drop_target.connect_leave(move |_| {
             bar_leave.remove_css_class("active");
+            bar_leave.remove_css_class("hovered");
         });
 
         let bar_drop_target = bar.clone();
         drop_target.connect_drop(move |_, val, _, _| {
             bar_drop_target.remove_css_class("active");
+            bar_drop_target.remove_css_class("hovered");
             let paths = extract_paths_from_drop_value(val);
             if paths.is_empty() {
                 return false;
@@ -107,17 +101,20 @@ impl HotspotWindow {
             true
         });
 
-        window.add_controller(drop_target);
+        bar.add_controller(drop_target);
 
-        // Click on hotspot opens radial overlay at cursor
+        // Click on hotspot opens radial overlay at cursor immediately (zero delay)
         let click = gtk4::GestureClick::new();
         let app_click = app.clone();
+        let bar_click = bar.clone();
         click.connect_pressed(move |_, _, _, _| {
-            OverlayWindow::spawn(&app_click, None);
+            bar_click.remove_css_class("hovered");
+            bar_click.remove_css_class("active");
+            OverlayWindow::spawn_with_files(&app_click, Vec::new());
         });
-        window.add_controller(click);
+        bar.add_controller(click);
 
-        // Motion controller to guarantee visual hover feedback
+        // Motion controller to guarantee visual hover feedback with automatic cleanup
         let motion = gtk4::EventControllerMotion::new();
         let bar_motion = bar.clone();
         motion.connect_enter(move |_, _, _| {
@@ -126,10 +123,11 @@ impl HotspotWindow {
         let bar_motion_leave = bar.clone();
         motion.connect_leave(move |_| {
             bar_motion_leave.remove_css_class("hovered");
+            bar_motion_leave.remove_css_class("active");
         });
-        window.add_controller(motion);
+        bar.add_controller(motion);
 
-        window.set_child(Some(&container));
+        window.set_child(Some(&bar));
 
         let win_weak = window.downgrade();
         window.connect_destroy(move |_| {

@@ -14,6 +14,13 @@ pub struct HyprdropApp;
 
 impl HyprdropApp {
     pub fn run(cli: Cli) -> glib::ExitCode {
+        // If settings command or app launcher runs and daemon isn't running, ensure daemon starts
+        let is_settings_or_default = matches!(cli.command, Some(Commands::Settings))
+            || (cli.command.is_none() && cli.file.is_none());
+        if !cli.daemon && is_settings_or_default && !crate::hyprland::is_daemon_running() {
+            crate::hyprland::ensure_daemon_running();
+        }
+
         // First check if this is a client command targeting an existing daemon
         if !cli.daemon {
             let msg = if let Some(ref cmd) = cli.command {
@@ -33,17 +40,14 @@ impl HyprdropApp {
                     Commands::Toggle => Some(IpcMessage::Toggle),
                     Commands::Settings => Some(IpcMessage::Settings),
                 }
-            } else {
-                let explicit = cli.file.clone();
-                let files = if let Some(ref f) = explicit {
-                    vec![f.clone()]
-                } else {
-                    crate::ui::overlay_window::detect_selected_files()
-                };
+            } else if let Some(ref f) = cli.file {
                 Some(IpcMessage::Trigger {
-                    file: files.first().cloned(),
-                    files: Some(files),
+                    file: Some(f.clone()),
+                    files: Some(vec![f.clone()]),
                 })
+            } else {
+                // Opened from application launcher without arguments: show Settings / Main Menu
+                Some(IpcMessage::Settings)
             };
 
             if let Some(ref m) = msg
@@ -88,14 +92,20 @@ impl HyprdropApp {
                         OverlayWindow::toggle(app, cli_activate.file.clone());
                     }
                     Commands::Settings => {
+                        if !crate::hyprland::is_daemon_running() {
+                            Self::start_daemon_loop(app);
+                        }
                         SettingsApp::spawn(app);
                     }
                 }
             } else if let Some(ref file) = cli_activate.file {
                 OverlayWindow::spawn(app, Some(file.clone()));
             } else {
-                // Default: open overlay window ready for drops
-                OverlayWindow::spawn(app, None);
+                // Default launcher fallback: ensure daemon loop and spawn Settings window
+                if !crate::hyprland::is_daemon_running() {
+                    Self::start_daemon_loop(app);
+                }
+                SettingsApp::spawn(app);
             }
         });
 

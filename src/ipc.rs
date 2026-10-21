@@ -22,6 +22,11 @@ pub enum IpcMessage {
 pub struct IpcClient;
 
 impl IpcClient {
+    /// Pings the running daemon to verify socket responsiveness.
+    pub fn ping() -> Result<bool> {
+        Self::send(&IpcMessage::Ping)
+    }
+
     /// Attempts to send an IPC message to the running daemon.
     /// Returns Ok(true) if connected and sent, Ok(false) or Err if no daemon.
     pub fn send(message: &IpcMessage) -> Result<bool> {

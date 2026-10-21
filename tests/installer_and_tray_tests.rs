@@ -185,5 +185,27 @@ fn test_is_hyprland_configured_in_modular_subpath() {
     assert!(hyprdrop::hyprland::installer::is_hyprland_configured_in(dir.path()));
 }
 
+#[test]
+fn test_ensure_systemd_service_file_generation() {
+    let dir = tempdir().expect("Failed to create tempdir");
+    let service_file = hyprdrop::hyprland::autostart::ensure_systemd_service_file(dir.path())
+        .expect("Should generate service file");
+
+    assert!(service_file.exists());
+    let content = fs::read_to_string(&service_file).expect("Should read service file");
+    assert!(content.contains("[Unit]"));
+    assert!(content.contains("PartOf=graphical-session.target"));
+    assert!(content.contains("ExecStart="));
+    assert!(content.contains("--daemon"));
+    assert!(content.contains("[Install]"));
+    assert!(content.contains("WantedBy=graphical-session.target"));
+}
+
+#[test]
+fn test_config_autostart_default() {
+    let cfg = hyprdrop::config::AppConfig::default();
+    assert!(cfg.autostart, "Autostart should default to true");
+}
+
 
 

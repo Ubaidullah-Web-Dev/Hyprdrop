@@ -94,7 +94,7 @@ impl RadialMenu {
             mode: RadialMode::FormatConversion,
             current_files: initial_files,
             file_category: category,
-            hovered_zone: HitZone::Outside,
+            hovered_zone: HitZone::CenterHub,
         }));
 
         let drawing_area = gtk4::DrawingArea::builder()

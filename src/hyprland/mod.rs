@@ -1,5 +1,8 @@
+pub mod autostart;
 pub mod installer;
 pub mod layer_shell;
+
+pub use autostart::{ensure_daemon_running, is_autostart_enabled, is_daemon_running, set_autostart};
 
 use std::process::Command;
 use serde::Deserialize;

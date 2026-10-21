@@ -284,6 +284,26 @@ button.mac-pill.active {
     font-size: 11px;
 }
 
+.badge-danger {
+    background-color: rgba(255, 69, 58, 0.15);
+    color: #FF453A;
+    border-radius: 6px;
+    padding: 2px 8px;
+    font-weight: 600;
+    font-family: monospace;
+    font-size: 11px;
+}
+
+.badge-info {
+    background-color: rgba(10, 132, 255, 0.15);
+    color: #0A84FF;
+    border-radius: 6px;
+    padding: 2px 8px;
+    font-weight: 600;
+    font-family: monospace;
+    font-size: 11px;
+}
+
 /* Drop Shelf Widget */
 .hyprdrop-shelf {
     background-color: rgba(18, 18, 22, 0.96);
@@ -333,6 +353,35 @@ scale slider:hover {
 .mac-swatch-btn.active {
     box-shadow: 0 0 0 2px #121216, 0 0 0 4px #0A84FF;
     transform: scale(1.05);
+}
+
+/* Custom GTK Switch (Electric Blue Theme) */
+switch {
+    background-color: #24242C;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 14px;
+    min-width: 44px;
+    min-height: 24px;
+    transition: all 180ms ease;
+}
+
+switch:checked {
+    background-color: #0A84FF;
+    border-color: #0A84FF;
+}
+
+switch slider {
+    background-color: #E2E2E8;
+    border-radius: 50%;
+    min-width: 18px;
+    min-height: 18px;
+    margin: 2px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
+    transition: all 180ms ease;
+}
+
+switch:checked slider {
+    background-color: #FFFFFF;
 }
 "#;
 

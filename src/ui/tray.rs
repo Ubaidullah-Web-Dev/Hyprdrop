@@ -382,6 +382,9 @@ fn dispatch_menu_action(app: &gtk4::Application, conn: &gio::DBusConnection, id:
         }
         5 => {
             // Quit Hyprdrop daemon
+            let _ = std::process::Command::new("systemctl")
+                .args(["--user", "stop", "hyprdrop.service"])
+                .spawn();
             app.quit();
         }
         _ => {}

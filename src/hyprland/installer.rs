@@ -47,7 +47,7 @@ hl.layer_rule({
 hl.bind(
     "SHIFT + mouse:272",
     hl.dsp.exec_cmd("hyprdrop trigger"),
-    { description = "Hyprdrop Radial Trigger" }
+    { description = "Hyprdrop Radial Trigger", mouse = true }
 )
 "#;
 

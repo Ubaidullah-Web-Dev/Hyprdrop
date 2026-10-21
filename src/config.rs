@@ -4,6 +4,10 @@ use anyhow::Result;
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 
+fn default_true() -> bool {
+    true
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
     pub output_dir: Option<PathBuf>,
@@ -12,6 +16,8 @@ pub struct AppConfig {
     pub wheel_size: u32,
     pub show_drop_shelf: bool,
     pub drop_shelf_timeout_secs: u32,
+    #[serde(default = "default_true")]
+    pub autostart: bool,
 }
 
 impl Default for AppConfig {
@@ -23,6 +29,7 @@ impl Default for AppConfig {
             wheel_size: 380,
             show_drop_shelf: true,
             drop_shelf_timeout_secs: 15,
+            autostart: true,
         }
     }
 }

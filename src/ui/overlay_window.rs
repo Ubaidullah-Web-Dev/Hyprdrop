@@ -88,7 +88,7 @@ impl OverlayWindow {
         let win_click = window.clone();
         let app_click = app.clone();
 
-        click.connect_pressed(move |gesture, _, _, _| {
+        click.connect_pressed(move |gesture, _, x, y| {
             let button = gesture.current_button();
             if button == gdk::BUTTON_SECONDARY {
                 // Right-Click flips mode
@@ -97,17 +97,21 @@ impl OverlayWindow {
             }
 
             let s = radial_click.state.borrow();
-            match s.hovered_zone {
+            let slices = match s.mode {
+                RadialMode::FormatConversion => get_conversion_slices(s.file_category),
+                RadialMode::QuickActions => get_quick_action_slices(s.file_category),
+            };
+
+            let cx = (RADIAL_SIZE as f64) / 2.0;
+            let cy = (RADIAL_SIZE as f64) / 2.0;
+            let hit = hit_test(x, y, cx, cy, INNER_RADIUS, OUTER_RADIUS, slices.len());
+
+            match hit {
                 HitZone::CenterHub => {
                     drop(s);
                     radial_click.toggle_mode();
                 }
                 HitZone::Slice(idx) => {
-                    let slices = match s.mode {
-                        RadialMode::FormatConversion => get_conversion_slices(s.file_category),
-                        RadialMode::QuickActions => get_quick_action_slices(s.file_category),
-                    };
-
                     if idx < slices.len() {
                         let slice_name = slices[idx];
                         let files = s.current_files.clone();
@@ -285,8 +289,10 @@ impl OverlayWindow {
 pub fn detect_selected_files() -> Vec<PathBuf> {
     let mut files = Vec::new();
 
-    // 1. Try querying the active file manager (e.g. Thunar) selection via accessibility bus
-    if let Ok(output) = Command::new("hyprdrop-detect-selection").output()
+    // 1. Try querying the active file manager (e.g. Thunar) selection via accessibility bus with strict timeout
+    if let Ok(output) = Command::new("timeout")
+        .args(["0.2s", "hyprdrop-detect-selection"])
+        .output()
         && output.status.success() {
         let text = String::from_utf8_lossy(&output.stdout);
         let trimmed = text.trim();
@@ -322,9 +328,9 @@ pub fn detect_selected_files() -> Vec<PathBuf> {
         None
     };
 
-    // 2. Try to read text/uri-list from standard clipboard (standard file manager copy format)
-    if let Ok(output) = Command::new("wl-paste")
-        .args(["-t", "text/uri-list"])
+    // 2. Try to read text/uri-list from standard clipboard (standard file manager copy format) with strict timeout
+    if let Ok(output) = Command::new("timeout")
+        .args(["0.15s", "wl-paste", "-t", "text/uri-list"])
         .output()
         && output.status.success() {
         let text = String::from_utf8_lossy(&output.stdout);
@@ -338,9 +344,9 @@ pub fn detect_selected_files() -> Vec<PathBuf> {
         }
     }
 
-    // 3. Try to read x-special/gnome-copied-files (GNOME/Nautilus/Thunar format)
-    if let Ok(output) = Command::new("wl-paste")
-        .args(["-t", "x-special/gnome-copied-files"])
+    // 3. Try to read x-special/gnome-copied-files (GNOME/Nautilus/Thunar format) with strict timeout
+    if let Ok(output) = Command::new("timeout")
+        .args(["0.15s", "wl-paste", "-t", "x-special/gnome-copied-files"])
         .output()
         && output.status.success() {
         let text = String::from_utf8_lossy(&output.stdout);
@@ -450,7 +456,7 @@ fn handle_slice_activation(
             std::thread::spawn(move || {
                 let results = execute_conversion_batch(&files_to_convert, &target_format);
 
-                glib::idle_add_local_once(move || {
+                glib::idle_add_once(move || {
                     let mut created: Vec<PathBuf> = Vec::new();
                     for (src, res) in files_to_convert.iter().zip(results) {
                         match res {
@@ -510,7 +516,7 @@ fn handle_slice_activation(
                     let src = first_file.clone();
                     std::thread::spawn(move || {
                         let res = compress_file(&src);
-                        glib::idle_add_local_once(move || {
+                        glib::idle_add_once(move || {
                             if let Ok(info) = res {
                                 let badge = format!("Saved {:.0}%", info.percent_saved);
                                 let _ = ConfigManager::append_history(

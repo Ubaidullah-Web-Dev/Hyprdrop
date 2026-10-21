@@ -74,11 +74,23 @@ impl SettingsApp {
 
         // Tab 2: System & Dependency Health
         let health_tab = build_health_tab();
-        notebook.append_page(&health_tab, Some(&gtk4::Label::new(Some("System & Health"))));
+        let health_scrolled = gtk4::ScrolledWindow::builder()
+            .vexpand(true)
+            .hexpand(true)
+            .hscrollbar_policy(gtk4::PolicyType::Never)
+            .child(&health_tab)
+            .build();
+        notebook.append_page(&health_scrolled, Some(&gtk4::Label::new(Some("System & Health"))));
 
-        // Tab 3: Hyprland & Preferences
+        // Tab 3: Hyprland & Preferences & Autostart
         let prefs_tab = build_preferences_tab();
-        notebook.append_page(&prefs_tab, Some(&gtk4::Label::new(Some("Hyprland & Config"))));
+        let prefs_scrolled = gtk4::ScrolledWindow::builder()
+            .vexpand(true)
+            .hexpand(true)
+            .hscrollbar_policy(gtk4::PolicyType::Never)
+            .child(&prefs_tab)
+            .build();
+        notebook.append_page(&prefs_scrolled, Some(&gtk4::Label::new(Some("Preferences & Autostart"))));
 
         root_box.append(&notebook);
 
@@ -238,6 +250,139 @@ fn build_health_tab() -> gtk4::Box {
 fn build_preferences_tab() -> gtk4::Box {
     let box_view = gtk4::Box::new(gtk4::Orientation::Vertical, 14);
     box_view.set_margin_top(12);
+    box_view.set_margin_bottom(12);
+    box_view.set_margin_start(4);
+    box_view.set_margin_end(4);
+
+    // 1. Autostart on Boot & Background Daemon Card
+    let autostart_section = gtk4::Box::new(gtk4::Orientation::Vertical, 10);
+    autostart_section.add_css_class("hyprdrop-card");
+
+    let auto_header = gtk4::Box::new(gtk4::Orientation::Horizontal, 12);
+    let auto_title_box = gtk4::Box::new(gtk4::Orientation::Vertical, 2);
+    auto_title_box.set_hexpand(true);
+
+    let auto_title = gtk4::Label::new(Some("Autostart on Boot (Daemon & App)"));
+    auto_title.add_css_class("hyprdrop-title");
+    auto_title.set_halign(gtk4::Align::Start);
+    auto_title_box.append(&auto_title);
+
+    let auto_desc = gtk4::Label::new(Some(
+        "Automatically start the Hyprdrop daemon and background services on system boot / login",
+    ));
+    auto_desc.add_css_class("hyprdrop-subtitle");
+    auto_desc.set_halign(gtk4::Align::Start);
+    auto_title_box.append(&auto_desc);
+    auto_header.append(&auto_title_box);
+
+    let autostart_switch = gtk4::Switch::new();
+    let current_autostart = crate::hyprland::is_autostart_enabled();
+    autostart_switch.set_active(current_autostart);
+    autostart_switch.set_valign(gtk4::Align::Center);
+    auto_header.append(&autostart_switch);
+    autostart_section.append(&auto_header);
+
+    // Live status label
+    let autostart_status = gtk4::Label::new(None);
+    autostart_status.set_halign(gtk4::Align::Start);
+    if current_autostart {
+        autostart_status.set_markup(
+            "<span foreground='#30D158' weight='bold'>● Autostart is ENABLED</span> <span foreground='#8E8E96'>(systemd user service &amp; XDG autostart active)</span>",
+        );
+    } else {
+        autostart_status.set_markup(
+            "<span foreground='#FF453A' weight='bold'>○ Autostart is DISABLED</span> <span foreground='#8E8E96'>(daemon and app will NOT start on boot)</span>",
+        );
+    }
+    autostart_section.append(&autostart_status);
+
+    // Daemon Runtime Status row
+    let daemon_row = gtk4::Box::new(gtk4::Orientation::Horizontal, 12);
+    daemon_row.set_margin_top(4);
+
+    let daemon_lbl = gtk4::Label::new(Some("Background Daemon Runtime:"));
+    daemon_lbl.add_css_class("hyprdrop-subtitle");
+    daemon_lbl.set_halign(gtk4::Align::Start);
+    daemon_row.append(&daemon_lbl);
+
+    let is_running = crate::hyprland::is_daemon_running();
+    let daemon_badge = gtk4::Label::new(Some(if is_running { "ACTIVE / RUNNING" } else { "INACTIVE / STOPPED" }));
+    daemon_badge.add_css_class(if is_running { "badge-success" } else { "badge-warning" });
+    daemon_row.append(&daemon_badge);
+
+    let spacer = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
+    spacer.set_hexpand(true);
+    daemon_row.append(&spacer);
+
+    let daemon_btn = gtk4::Button::with_label(if is_running { "Restart Daemon" } else { "Start Daemon" });
+    daemon_btn.add_css_class("hyprdrop-secondary");
+    daemon_btn.set_valign(gtk4::Align::Center);
+
+    let daemon_badge_clone = daemon_badge.clone();
+    let daemon_btn_clone = daemon_btn.clone();
+    daemon_btn.connect_clicked(move |_| {
+        let _ = crate::hyprland::ensure_daemon_running();
+        let running_now = crate::hyprland::is_daemon_running();
+        if running_now {
+            daemon_badge_clone.set_text("ACTIVE / RUNNING");
+            daemon_badge_clone.remove_css_class("badge-warning");
+            daemon_badge_clone.remove_css_class("badge-danger");
+            daemon_badge_clone.add_css_class("badge-success");
+            daemon_btn_clone.set_label("Restart Daemon");
+        } else {
+            daemon_badge_clone.set_text("INACTIVE / STOPPED");
+            daemon_badge_clone.remove_css_class("badge-success");
+            daemon_badge_clone.add_css_class("badge-warning");
+            daemon_btn_clone.set_label("Start Daemon");
+        }
+    });
+    daemon_row.append(&daemon_btn);
+    autostart_section.append(&daemon_row);
+
+    // Switch handler
+    let status_lbl_clone = autostart_status.clone();
+    let daemon_badge_clone_sw = daemon_badge.clone();
+    let daemon_btn_clone_sw = daemon_btn.clone();
+    autostart_switch.connect_state_set(move |_, state| {
+        match crate::hyprland::set_autostart(state) {
+            Ok(_) => {
+                let mut cfg = ConfigManager::load_config();
+                cfg.autostart = state;
+                let _ = ConfigManager::save_config(&cfg);
+                if state {
+                    status_lbl_clone.set_markup(
+                        "<span foreground='#30D158' weight='bold'>● Autostart is ENABLED</span> <span foreground='#8E8E96'>(systemd user service &amp; XDG autostart active)</span>",
+                    );
+                } else {
+                    status_lbl_clone.set_markup(
+                        "<span foreground='#FF453A' weight='bold'>○ Autostart is DISABLED</span> <span foreground='#8E8E96'>(daemon and app will NOT start on boot)</span>",
+                    );
+                }
+            }
+            Err(e) => {
+                status_lbl_clone.set_markup(&format!(
+                    "<span foreground='#FF453A'>Failed to update autostart: {:?}</span>",
+                    e
+                ));
+            }
+        }
+        let running_now = crate::hyprland::is_daemon_running();
+        if running_now {
+            daemon_badge_clone_sw.set_text("ACTIVE / RUNNING");
+            daemon_badge_clone_sw.remove_css_class("badge-warning");
+            daemon_badge_clone_sw.remove_css_class("badge-danger");
+            daemon_badge_clone_sw.add_css_class("badge-success");
+            daemon_btn_clone_sw.set_label("Restart Daemon");
+        } else {
+            daemon_badge_clone_sw.set_text("INACTIVE / STOPPED");
+            daemon_badge_clone_sw.remove_css_class("badge-success");
+            daemon_badge_clone_sw.add_css_class("badge-warning");
+            daemon_btn_clone_sw.set_label("Start Daemon");
+        }
+        gtk4::glib::Propagation::Proceed
+    });
+
+    box_view.append(&autostart_section);
 
     let hypr_section = gtk4::Box::new(gtk4::Orientation::Vertical, 8);
     hypr_section.add_css_class("hyprdrop-card");
