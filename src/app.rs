@@ -132,14 +132,13 @@ impl HyprdropApp {
             while let Some(msg) = IpcServer::try_recv(&l) {
                 match msg {
                     IpcMessage::Trigger { file, files } => {
-                        let mut targets = files.unwrap_or_default();
-                        if targets.is_empty() {
-                            if let Some(f) = file {
-                                targets.push(f);
-                            } else {
-                                targets = crate::ui::overlay_window::detect_selected_files();
-                            }
-                        }
+                        let targets = if let Some(fs) = files {
+                            fs
+                        } else if let Some(f) = file {
+                            vec![f]
+                        } else {
+                            crate::ui::overlay_window::detect_selected_files()
+                        };
                         OverlayWindow::spawn_with_files(&app_timer, targets);
                     }
                     IpcMessage::Toggle => {

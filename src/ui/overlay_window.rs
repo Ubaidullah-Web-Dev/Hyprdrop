@@ -56,7 +56,9 @@ impl OverlayWindow {
 
     /// Spawns the overlay window with an optional single preloaded file.
     pub fn spawn(app: &gtk4::Application, preloaded_file: Option<PathBuf>) {
-        let files = preloaded_file.map(|f| vec![f]).unwrap_or_default();
+        let files = preloaded_file
+            .map(|f| vec![f])
+            .unwrap_or_else(detect_selected_files);
         Self::spawn_with_files(app, files);
     }
 
@@ -76,14 +78,7 @@ impl OverlayWindow {
         window.add_css_class("hyprdrop-overlay");
         configure_layer_shell_window(&window, RADIAL_SIZE, RADIAL_SIZE, None);
 
-        // Auto-detect selected files if no explicit file was passed
-        let effective_files = if preloaded_files.is_empty() {
-            detect_selected_files()
-        } else {
-            preloaded_files
-        };
-
-        let radial = Rc::new(RadialMenu::new_with_files(effective_files));
+        let radial = Rc::new(RadialMenu::new_with_files(preloaded_files));
 
         // Click Gesture on Radial Menu
         let click = gtk4::GestureClick::new();
@@ -287,40 +282,59 @@ impl OverlayWindow {
 }
 
 /// Auto-detects selected files from active file manager, clipboard (URIs, paths, raw images),
-/// or Wayland primary selection.
+/// or Wayland primary selection without sending synthetic keyboard events.
 pub fn detect_selected_files() -> Vec<PathBuf> {
     let mut files = Vec::new();
 
-    // 1. If a file manager is currently focused (Thunar, Nautilus, Dolphin, Nemo, PCManFM),
-    // trigger a fast Ctrl+C via wtype to copy the current selection into the Wayland clipboard.
-    if is_file_manager_focused() {
-        let _ = Command::new("wtype")
-            .args(["-M", "ctrl", "-k", "c", "-m", "ctrl"])
-            .output();
-        // Brief yield for the Wayland clipboard transfer to complete
-        std::thread::sleep(std::time::Duration::from_millis(50));
-    }
+    // Helper to resolve a trimmed string into an existing PathBuf
+    let resolve_file = |trimmed: &str| -> Option<PathBuf> {
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            return None;
+        }
+        if let Ok((p, _)) = glib::filename_from_uri(trimmed) {
+            if p.exists() {
+                return Some(p);
+            }
+        } else if let Some(stripped) = trimmed.strip_prefix("file://") {
+            let p = PathBuf::from(stripped);
+            if p.exists() {
+                return Some(p);
+            }
+        } else {
+            let p = PathBuf::from(trimmed);
+            if p.is_absolute() && p.exists() {
+                return Some(p);
+            }
+            // Check common user directories for relative filenames
+            if let Some(home) = dirs::home_dir() {
+                let candidates = [
+                    home.join("Pictures").join("wallpapers").join(trimmed),
+                    home.join("Pictures").join(trimmed),
+                    home.join("Videos").join(trimmed),
+                    home.join("Downloads").join(trimmed),
+                    home.join("Documents").join(trimmed),
+                    home.join("Desktop").join(trimmed),
+                    home.join(trimmed),
+                ];
+                for cand in candidates {
+                    if cand.exists() && cand.is_file() {
+                        return Some(cand);
+                    }
+                }
+            }
+        }
+        None
+    };
 
-    // 2. Try to read text/uri-list from standard clipboard (standard file manager copy format)
+    // 1. Try to read text/uri-list from standard clipboard (standard file manager copy format)
     if let Ok(output) = Command::new("wl-paste")
         .args(["-t", "text/uri-list"])
         .output()
         && output.status.success() {
         let text = String::from_utf8_lossy(&output.stdout);
         for line in text.lines() {
-            let trimmed = line.trim();
-            if trimmed.is_empty() || trimmed.starts_with('#') {
-                continue;
-            }
-            if let Ok((p, _)) = glib::filename_from_uri(trimmed) {
-                if p.exists() {
-                    files.push(p);
-                }
-            } else if let Some(stripped) = trimmed.strip_prefix("file://") {
-                let p = PathBuf::from(stripped);
-                if p.exists() {
-                    files.push(p);
-                }
+            if let Some(p) = resolve_file(line.trim()) {
+                files.push(p);
             }
         }
         if !files.is_empty() {
@@ -328,7 +342,7 @@ pub fn detect_selected_files() -> Vec<PathBuf> {
         }
     }
 
-    // 3. Try to read x-special/gnome-copied-files (GNOME/Nautilus/Thunar format)
+    // 2. Try to read x-special/gnome-copied-files (GNOME/Nautilus/Thunar format)
     if let Ok(output) = Command::new("wl-paste")
         .args(["-t", "x-special/gnome-copied-files"])
         .output()
@@ -336,18 +350,11 @@ pub fn detect_selected_files() -> Vec<PathBuf> {
         let text = String::from_utf8_lossy(&output.stdout);
         for line in text.lines() {
             let trimmed = line.trim();
-            if trimmed == "copy" || trimmed == "cut" || trimmed.is_empty() {
+            if trimmed == "copy" || trimmed == "cut" {
                 continue;
             }
-            if let Ok((p, _)) = glib::filename_from_uri(trimmed) {
-                if p.exists() {
-                    files.push(p);
-                }
-            } else if let Some(stripped) = trimmed.strip_prefix("file://") {
-                let p = PathBuf::from(stripped);
-                if p.exists() {
-                    files.push(p);
-                }
+            if let Some(p) = resolve_file(trimmed) {
+                files.push(p);
             }
         }
         if !files.is_empty() {
@@ -355,29 +362,13 @@ pub fn detect_selected_files() -> Vec<PathBuf> {
         }
     }
 
-    // 4. Try standard clipboard text (wl-paste)
+    // 3. Try standard clipboard text (wl-paste)
     if let Ok(output) = Command::new("wl-paste").output()
         && output.status.success() {
         let text = String::from_utf8_lossy(&output.stdout);
         for line in text.lines() {
-            let trimmed = line.trim();
-            if trimmed.is_empty() {
-                continue;
-            }
-            if let Ok((p, _)) = glib::filename_from_uri(trimmed) {
-                if p.exists() {
-                    files.push(p);
-                }
-            } else if let Some(stripped) = trimmed.strip_prefix("file://") {
-                let p = PathBuf::from(stripped);
-                if p.exists() {
-                    files.push(p);
-                }
-            } else {
-                let p = PathBuf::from(trimmed);
-                if p.exists() && p.is_file() {
-                    files.push(p);
-                }
+            if let Some(p) = resolve_file(line.trim()) {
+                files.push(p);
             }
         }
         if !files.is_empty() {
@@ -385,29 +376,13 @@ pub fn detect_selected_files() -> Vec<PathBuf> {
         }
     }
 
-    // 5. Try Wayland primary selection (wl-paste -p) for highlighted file paths
+    // 4. Try Wayland primary selection (wl-paste -p) for highlighted file paths
     if let Ok(output) = Command::new("wl-paste").arg("-p").output()
         && output.status.success() {
         let text = String::from_utf8_lossy(&output.stdout);
         for line in text.lines() {
-            let trimmed = line.trim();
-            if trimmed.is_empty() {
-                continue;
-            }
-            if let Ok((p, _)) = glib::filename_from_uri(trimmed) {
-                if p.exists() {
-                    files.push(p);
-                }
-            } else if let Some(stripped) = trimmed.strip_prefix("file://") {
-                let p = PathBuf::from(stripped);
-                if p.exists() {
-                    files.push(p);
-                }
-            } else {
-                let p = PathBuf::from(trimmed);
-                if p.exists() && p.is_file() {
-                    files.push(p);
-                }
+            if let Some(p) = resolve_file(line.trim()) {
+                files.push(p);
             }
         }
         if !files.is_empty() {
@@ -421,31 +396,6 @@ pub fn detect_selected_files() -> Vec<PathBuf> {
 /// Auto-detects a single selected file.
 pub fn detect_selected_file() -> Option<PathBuf> {
     detect_selected_files().into_iter().next()
-}
-
-fn is_file_manager_focused() -> bool {
-    let Ok(output) = Command::new("hyprctl")
-        .args(["activewindow", "-j"])
-        .output() else {
-        return false;
-    };
-    if !output.status.success() {
-        return false;
-    }
-    let Ok(v) = serde_json::from_slice::<serde_json::Value>(&output.stdout) else {
-        return false;
-    };
-    let class = v.get("class").and_then(|c| c.as_str()).unwrap_or("").to_lowercase();
-    let title = v.get("title").and_then(|t| t.as_str()).unwrap_or("").to_lowercase();
-    class.contains("thunar")
-        || class.contains("nautilus")
-        || class.contains("dolphin")
-        || class.contains("nemo")
-        || class.contains("pcmanfm")
-        || class.contains("caja")
-        || title.ends_with("- thunar")
-        || title.ends_with("- dolphin")
-        || title.ends_with("- files")
 }
 
 /// Robustly extracts local filesystem paths from a GTK DropTarget value.
