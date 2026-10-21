@@ -42,47 +42,46 @@ window.hyprdrop-hotspot,
 }
 
 .hyprdrop-hotspot-bar {
-    min-width: 14px;
+    min-width: 7px;
     min-height: 240px;
-    background-color: rgba(22, 22, 28, 0.90);
-    border-left: 1px solid rgba(255, 255, 255, 0.22);
+    background-color: rgba(20, 20, 26, 0.92);
+    border-left: 1px solid rgba(255, 255, 255, 0.20);
     border-top: 1px solid rgba(255, 255, 255, 0.14);
     border-bottom: 1px solid rgba(255, 255, 255, 0.14);
     border-right: none;
-    border-radius: 12px 0 0 12px;
-    box-shadow: -4px 0 18px rgba(0, 0, 0, 0.6);
-    transition: all 200ms cubic-bezier(0.16, 1, 0.3, 1);
+    border-radius: 6px 0 0 6px;
+    box-shadow: -4px 0 16px rgba(0, 0, 0, 0.5);
+    transition: all 180ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .hyprdrop-hotspot-indicator {
-    min-width: 3px;
-    min-height: 80px;
+    min-width: 2px;
     background-color: #0A84FF;
     border-radius: 2px;
-    opacity: 0.75;
+    opacity: 0.85;
     transition: all 180ms ease;
 }
 
 .hyprdrop-hotspot-bar:hover,
 .hyprdrop-hotspot-bar.hovered {
-    min-width: 22px;
-    background-color: rgba(28, 28, 38, 0.96);
+    min-width: 11px;
+    background-color: rgba(26, 26, 36, 0.96);
     border-left: 1px solid #0A84FF;
-    box-shadow: -6px 0 24px rgba(10, 132, 255, 0.6);
+    box-shadow: -4px 0 20px rgba(10, 132, 255, 0.55);
 }
 
 .hyprdrop-hotspot-bar:hover .hyprdrop-hotspot-indicator,
 .hyprdrop-hotspot-bar.hovered .hyprdrop-hotspot-indicator {
     background-color: #2E95FF;
     opacity: 1.0;
-    box-shadow: 0 0 10px #0A84FF;
+    box-shadow: 0 0 8px #0A84FF;
 }
 
 .hyprdrop-hotspot-bar.active {
-    min-width: 26px;
+    min-width: 13px;
     background-color: #0A84FF;
     border-left: 1px solid #FFFFFF;
-    box-shadow: -8px 0 32px rgba(10, 132, 255, 0.95);
+    box-shadow: -6px 0 24px rgba(10, 132, 255, 0.9);
 }
 
 .hyprdrop-hotspot-bar.active .hyprdrop-hotspot-indicator {

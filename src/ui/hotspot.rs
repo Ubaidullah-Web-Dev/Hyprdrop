@@ -25,8 +25,8 @@ impl HotspotWindow {
         let window = gtk4::ApplicationWindow::builder()
             .application(app)
             .title("Hyprdrop Edge Hotspot")
-            .default_width(28)
-            .default_height(260)
+            .default_width(56)
+            .default_height(340)
             .resizable(false)
             .decorated(false)
             .build();
@@ -47,16 +47,21 @@ impl HotspotWindow {
         let container = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
         container.set_halign(gtk4::Align::End);
         container.set_valign(gtk4::Align::Center);
+        container.set_margin_top(24);
+        container.set_margin_bottom(24);
+        container.set_margin_start(24);
 
         let bar = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
-        bar.set_size_request(14, 240);
+        bar.set_size_request(7, 240);
         bar.add_css_class("hyprdrop-hotspot-bar");
         bar.set_tooltip_text(Some("Hyprdrop — Drag files here to convert or edit"));
         bar.set_valign(gtk4::Align::Center);
 
         let indicator = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
-        indicator.set_size_request(3, 80);
-        indicator.set_valign(gtk4::Align::Center);
+        indicator.set_size_request(2, -1);
+        indicator.set_vexpand(true);
+        indicator.set_margin_top(10);
+        indicator.set_margin_bottom(10);
         indicator.set_halign(gtk4::Align::Center);
         indicator.add_css_class("hyprdrop-hotspot-indicator");
         bar.append(&indicator);
