@@ -281,12 +281,25 @@ impl OverlayWindow {
     }
 }
 
-/// Auto-detects selected files from active file manager, clipboard (URIs, paths, raw images),
-/// or Wayland primary selection without sending synthetic keyboard events.
+/// Auto-detects selected files from active file manager or clipboard without sending synthetic keyboard events.
 pub fn detect_selected_files() -> Vec<PathBuf> {
     let mut files = Vec::new();
 
-    // Helper to resolve a trimmed string into an existing PathBuf
+    // 1. Try querying the active file manager (e.g. Thunar) selection via accessibility bus
+    if let Ok(output) = Command::new("hyprdrop-detect-selection").output()
+        && output.status.success() {
+        let text = String::from_utf8_lossy(&output.stdout);
+        let trimmed = text.trim();
+        if !trimmed.is_empty() {
+            let p = PathBuf::from(trimmed);
+            if p.exists() {
+                files.push(p);
+                return files;
+            }
+        }
+    }
+
+    // Helper to resolve a trimmed URI or path into an existing PathBuf
     let resolve_file = |trimmed: &str| -> Option<PathBuf> {
         if trimmed.is_empty() || trimmed.starts_with('#') {
             return None;
@@ -305,28 +318,11 @@ pub fn detect_selected_files() -> Vec<PathBuf> {
             if p.is_absolute() && p.exists() {
                 return Some(p);
             }
-            // Check common user directories for relative filenames
-            if let Some(home) = dirs::home_dir() {
-                let candidates = [
-                    home.join("Pictures").join("wallpapers").join(trimmed),
-                    home.join("Pictures").join(trimmed),
-                    home.join("Videos").join(trimmed),
-                    home.join("Downloads").join(trimmed),
-                    home.join("Documents").join(trimmed),
-                    home.join("Desktop").join(trimmed),
-                    home.join(trimmed),
-                ];
-                for cand in candidates {
-                    if cand.exists() && cand.is_file() {
-                        return Some(cand);
-                    }
-                }
-            }
         }
         None
     };
 
-    // 1. Try to read text/uri-list from standard clipboard (standard file manager copy format)
+    // 2. Try to read text/uri-list from standard clipboard (standard file manager copy format)
     if let Ok(output) = Command::new("wl-paste")
         .args(["-t", "text/uri-list"])
         .output()
@@ -342,7 +338,7 @@ pub fn detect_selected_files() -> Vec<PathBuf> {
         }
     }
 
-    // 2. Try to read x-special/gnome-copied-files (GNOME/Nautilus/Thunar format)
+    // 3. Try to read x-special/gnome-copied-files (GNOME/Nautilus/Thunar format)
     if let Ok(output) = Command::new("wl-paste")
         .args(["-t", "x-special/gnome-copied-files"])
         .output()
@@ -354,34 +350,6 @@ pub fn detect_selected_files() -> Vec<PathBuf> {
                 continue;
             }
             if let Some(p) = resolve_file(trimmed) {
-                files.push(p);
-            }
-        }
-        if !files.is_empty() {
-            return files;
-        }
-    }
-
-    // 3. Try standard clipboard text (wl-paste)
-    if let Ok(output) = Command::new("wl-paste").output()
-        && output.status.success() {
-        let text = String::from_utf8_lossy(&output.stdout);
-        for line in text.lines() {
-            if let Some(p) = resolve_file(line.trim()) {
-                files.push(p);
-            }
-        }
-        if !files.is_empty() {
-            return files;
-        }
-    }
-
-    // 4. Try Wayland primary selection (wl-paste -p) for highlighted file paths
-    if let Ok(output) = Command::new("wl-paste").arg("-p").output()
-        && output.status.success() {
-        let text = String::from_utf8_lossy(&output.stdout);
-        for line in text.lines() {
-            if let Some(p) = resolve_file(line.trim()) {
                 files.push(p);
             }
         }
