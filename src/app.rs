@@ -142,6 +142,11 @@ impl HyprdropApp {
         // 30ms polling interval for ultra-low latency response
         glib::timeout_add_local(Duration::from_millis(30), move || {
             ticks = ticks.wrapping_add(1);
+            if ticks.is_multiple_of(30) {
+                // Periodic fallback sync (~every 900ms) for fullscreen state
+                let is_fs = crate::hyprland::check_is_fullscreen();
+                crate::ui::hotspot::HotspotWindow::set_fullscreen_hidden(is_fs);
+            }
             if ticks.is_multiple_of(300) {
                 // Periodically trim heap memory back to OS kernel (~every 9s)
                 crate::engine::trim_memory();

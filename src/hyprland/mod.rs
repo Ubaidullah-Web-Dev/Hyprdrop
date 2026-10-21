@@ -95,3 +95,66 @@ pub fn ensure_hyprland_floating_rules() {
         .args(["keyword", "windowrulev2", "center, title:^(.*Hyprdrop.*)$"])
         .output();
 }
+
+/// Checks if any window is currently fullscreen on the active workspace or monitor.
+pub fn check_is_fullscreen() -> bool {
+    // 1. Check active workspace hasfullscreen
+    if let Ok(output) = Command::new("hyprctl").args(["activeworkspace", "-j"]).output()
+        && output.status.success()
+            && let Ok(val) = serde_json::from_slice::<serde_json::Value>(&output.stdout) {
+                if let Some(has_fs) = val.get("hasfullscreen").and_then(|v| v.as_bool()) {
+                    if has_fs {
+                        return true;
+                    }
+                }
+            }
+
+    // 2. Check active window fullscreen state
+    if let Ok(output) = Command::new("hyprctl").args(["activewindow", "-j"]).output()
+        && output.status.success()
+            && let Ok(val) = serde_json::from_slice::<serde_json::Value>(&output.stdout) {
+                if let Some(fs) = val.get("fullscreen").and_then(|v| v.as_i64()) {
+                    if fs != 0 {
+                        return true;
+                    }
+                }
+            }
+
+    false
+}
+
+/// Starts an event-driven listener on Hyprland's `.socket2.sock`.
+/// Runs on a background thread and invokes `callback(is_fullscreen)` whenever
+/// a window enters or leaves fullscreen, or when workspaces/monitors switch.
+pub fn listen_hyprland_fullscreen_events<F>(callback: F)
+where
+    F: Fn(bool) + Send + 'static,
+{
+    std::thread::spawn(move || {
+        let xdg = std::env::var("XDG_RUNTIME_DIR").unwrap_or_else(|_| "/run/user/1000".to_string());
+        let his = std::env::var("HYPRLAND_INSTANCE_SIGNATURE").unwrap_or_default();
+        let sock_path = format!("{}/hypr/{}/.socket2.sock", xdg, his);
+
+        loop {
+            if let Ok(stream) = std::os::unix::net::UnixStream::connect(&sock_path) {
+                let reader = std::io::BufReader::new(stream);
+                for line in std::io::BufRead::lines(reader) {
+                    let Ok(line) = line else { break };
+                    if line.starts_with("fullscreen>>") {
+                        let state = line.trim_start_matches("fullscreen>>");
+                        let is_fs = state != "0";
+                        callback(is_fs);
+                    } else if line.starts_with("workspace>>")
+                        || line.starts_with("focusedmon>>")
+                        || line.starts_with("activewindow>>")
+                        || line.starts_with("activewindowv2>>")
+                    {
+                        let is_fs = check_is_fullscreen();
+                        callback(is_fs);
+                    }
+                }
+            }
+            std::thread::sleep(std::time::Duration::from_millis(500));
+        }
+    });
+}

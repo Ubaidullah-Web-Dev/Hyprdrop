@@ -51,7 +51,22 @@ window.hyprdrop-hotspot,
     border-right: none;
     border-radius: 6px 0 0 6px;
     box-shadow: -4px 0 16px rgba(0, 0, 0, 0.55);
-    transition: all 180ms cubic-bezier(0.16, 1, 0.3, 1);
+    opacity: 1.0;
+    margin-right: 0px;
+    transition: opacity 260ms cubic-bezier(0.16, 1, 0.3, 1),
+                margin-right 260ms cubic-bezier(0.16, 1, 0.3, 1),
+                min-width 180ms cubic-bezier(0.16, 1, 0.3, 1),
+                background-color 180ms ease,
+                border-color 180ms ease,
+                box-shadow 180ms ease;
+}
+
+.hyprdrop-hotspot-bar.hidden-fullscreen {
+    opacity: 0.0;
+    margin-right: -24px;
+    min-width: 0px;
+    box-shadow: none;
+    border-color: transparent;
 }
 
 .hyprdrop-hotspot-indicator {
@@ -60,6 +75,10 @@ window.hyprdrop-hotspot,
     border-radius: 2px;
     opacity: 0.90;
     transition: all 180ms ease;
+}
+
+.hyprdrop-hotspot-bar.hidden-fullscreen .hyprdrop-hotspot-indicator {
+    opacity: 0.0;
 }
 
 .hyprdrop-hotspot-bar:hover,
