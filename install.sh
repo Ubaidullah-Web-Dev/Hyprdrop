@@ -198,8 +198,8 @@ systemctl --user daemon-reload || true
 systemctl --user enable --now hyprdrop.service || true
 
 echo ""
-echo "==> Running Hyprland auto-configuration..."
-"${BIN_DIR}/hyprdrop" settings &
+echo "==> Configuring Hyprland window rules, layer rules, and Shift+Click bind..."
+"${BIN_DIR}/hyprdrop" setup || true
 
 echo ""
 echo "=========================================================="

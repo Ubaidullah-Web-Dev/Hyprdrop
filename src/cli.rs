@@ -28,4 +28,7 @@ pub enum Commands {
     Toggle,
     /// Opens desktop settings and activity history
     Settings,
+    /// Automatically configures Hyprland rules and mouse keybinds
+    #[command(alias = "configure")]
+    Setup,
 }

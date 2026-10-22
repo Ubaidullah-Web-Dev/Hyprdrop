@@ -25,6 +25,29 @@ impl HyprdropApp {
         if !cli.daemon {
             let msg = if let Some(ref cmd) = cli.command {
                 match cmd {
+                    Commands::Setup => {
+                        println!("==> Configuring Hyprland for Hyprdrop...");
+                        match crate::hyprland::installer::configure_hyprland() {
+                            Ok(result) => {
+                                if result.already_configured {
+                                    println!("    [✓] Hyprland is already configured for Hyprdrop.");
+                                } else {
+                                    println!("    [✓] Injected window rules, layer rules, and SHIFT+Click bind into Hyprland configuration!");
+                                    if let Some(bak) = result.backup_path {
+                                        println!("    [✓] Created timestamped backup: {}", bak.display());
+                                    }
+                                    println!("    [✓] Reloaded Hyprland session via hyprctl reload.");
+                                }
+                                return glib::ExitCode::SUCCESS;
+                            }
+                            Err(e) => {
+                                eprintln!("    [!] Failed to auto-configure Hyprland: {}", e);
+                                eprintln!("    Please add the following bind to your hyprland.conf:");
+                                eprintln!("      bind = SHIFT, mouse:272, exec, hyprdrop trigger");
+                                return glib::ExitCode::FAILURE;
+                            }
+                        }
+                    }
                     Commands::Trigger { file } => {
                         let explicit = file.clone().or_else(|| cli.file.clone());
                         let files = if let Some(ref f) = explicit {
@@ -86,6 +109,9 @@ impl HyprdropApp {
                 Self::start_daemon_loop(app);
             } else if let Some(ref cmd) = cli_activate.command {
                 match cmd {
+                    Commands::Setup => {
+                        return;
+                    }
                     Commands::Trigger { file } => {
                         let target = file.clone().or_else(|| cli_activate.file.clone());
                         OverlayWindow::spawn(app, target);

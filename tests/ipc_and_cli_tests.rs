@@ -37,6 +37,15 @@ fn test_cli_settings_subcommand() {
 }
 
 #[test]
+fn test_cli_setup_subcommand() {
+    let cli = Cli::try_parse_from(["hyprdrop", "setup"]).expect("Failed to parse setup");
+    assert!(matches!(cli.command, Some(Commands::Setup)));
+
+    let cli_alias = Cli::try_parse_from(["hyprdrop", "configure"]).expect("Failed to parse configure");
+    assert!(matches!(cli_alias.command, Some(Commands::Setup)));
+}
+
+#[test]
 fn test_cli_direct_file_argument() {
     let cli = Cli::try_parse_from(["hyprdrop", "/home/user/document.pdf"])
         .expect("Failed to parse direct file");
