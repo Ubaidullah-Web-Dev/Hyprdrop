@@ -73,43 +73,28 @@ pub fn open_add_bg_modal(
     let root_box = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
     root_box.add_css_class("mac-window");
 
-    // 1. macOS Header Bar (Traffic lights, Centered title, Close button)
+    // Header Bar
     let header_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 12);
     header_box.set_margin_start(20);
     header_box.set_margin_end(20);
     header_box.set_margin_top(16);
     header_box.set_margin_bottom(12);
 
-    let traffic_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
-    traffic_box.set_valign(gtk4::Align::Center);
+    let title_icon = gtk4::Image::from_icon_name("image-x-generic-symbolic");
+    title_icon.set_pixel_size(18);
+    title_icon.add_css_class("hyprdrop-brand-icon");
+    header_box.append(&title_icon);
 
-    let dot_close = gtk4::Button::new();
-    dot_close.add_css_class("mac-traffic-dot");
-    dot_close.add_css_class("mac-dot-close");
-    let win_close = window.clone();
-    dot_close.connect_clicked(move |_| win_close.close());
-
-    let dot_min = gtk4::Button::new();
-    dot_min.add_css_class("mac-traffic-dot");
-    dot_min.add_css_class("mac-dot-min");
-
-    let dot_max = gtk4::Button::new();
-    dot_max.add_css_class("mac-traffic-dot");
-    dot_max.add_css_class("mac-dot-max");
-
-    traffic_box.append(&dot_close);
-    traffic_box.append(&dot_min);
-    traffic_box.append(&dot_max);
-    header_box.append(&traffic_box);
-
-    let title_lbl = gtk4::Label::new(Some("Add Background Studio"));
-    title_lbl.add_css_class("mac-title");
+    let title_lbl = gtk4::Label::new(Some("Background Studio"));
+    title_lbl.add_css_class("hyprdrop-title");
     title_lbl.set_hexpand(true);
-    title_lbl.set_halign(gtk4::Align::Center);
+    title_lbl.set_halign(gtk4::Align::Start);
     header_box.append(&title_lbl);
 
     let right_close = gtk4::Button::from_icon_name("window-close-symbolic");
-    right_close.add_css_class("hyprdrop-pill");
+    right_close.add_css_class("hyprdrop-ghost");
+    right_close.add_css_class("hyprdrop-ghost-danger");
+    right_close.set_tooltip_text(Some("Close"));
     let win_close2 = window.clone();
     right_close.connect_clicked(move |_| win_close2.close());
     header_box.append(&right_close);

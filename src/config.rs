@@ -130,6 +130,14 @@ impl ConfigManager {
         fs::write(Self::history_path(), json)?;
         Ok(())
     }
+
+    pub fn clear_history() -> Result<()> {
+        let path = Self::history_path();
+        if path.exists() {
+            fs::write(&path, "[]")?;
+        }
+        Ok(())
+    }
 }
 
 fn users_uid() -> u32 {
