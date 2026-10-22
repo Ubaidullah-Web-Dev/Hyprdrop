@@ -546,9 +546,10 @@ fn handle_slice_activation(
         RadialMode::QuickActions => {
             match slice_name {
                 "CROP" => {
-                    window.close();
                     let app_shelf = app.clone();
-                    open_crop_modal(window, first_file, move |out_path| {
+                    let file = first_file.clone();
+                    window.close();
+                    open_crop_modal(Some(app), &file, move |out_path| {
                         let app_reopen = app_shelf.clone();
                         DropShelf::spawn(out_path, None, move |chained_file| {
                             OverlayWindow::spawn(&app_reopen, Some(chained_file));
@@ -556,9 +557,10 @@ fn handle_slice_activation(
                     });
                 }
                 "ADD BG" => {
-                    window.close();
                     let app_shelf = app.clone();
-                    open_add_bg_modal(window, first_file, move |out_path| {
+                    let file = first_file.clone();
+                    window.close();
+                    open_add_bg_modal(Some(app), &file, move |out_path| {
                         let app_reopen = app_shelf.clone();
                         DropShelf::spawn(out_path, None, move |chained_file| {
                             OverlayWindow::spawn(&app_reopen, Some(chained_file));
@@ -594,9 +596,10 @@ fn handle_slice_activation(
                     });
                 }
                 "REDACT" | "ANNOTATE" => {
-                    window.close();
                     let app_shelf = app.clone();
-                    open_redact_annotate_modal(window, first_file, move |out_path| {
+                    let file = first_file.clone();
+                    window.close();
+                    open_redact_annotate_modal(Some(app), &file, move |out_path| {
                         let app_reopen = app_shelf.clone();
                         DropShelf::spawn(out_path, None, move |chained_file| {
                             OverlayWindow::spawn(&app_reopen, Some(chained_file));
@@ -604,9 +607,10 @@ fn handle_slice_activation(
                     });
                 }
                 "METADATA" => {
-                    window.close();
                     let app_shelf = app.clone();
-                    open_metadata_modal(window, first_file, move |out_path| {
+                    let file = first_file.clone();
+                    window.close();
+                    open_metadata_modal(Some(app), &file, move |out_path| {
                         let app_reopen = app_shelf.clone();
                         DropShelf::spawn(out_path, None, move |chained_file| {
                             OverlayWindow::spawn(&app_reopen, Some(chained_file));
@@ -614,9 +618,10 @@ fn handle_slice_activation(
                     });
                 }
                 "EDIT" => {
-                    window.close();
                     let app_shelf = app.clone();
-                    open_quick_edit_modal(window, first_file, move |out_path| {
+                    let file = first_file.clone();
+                    window.close();
+                    open_quick_edit_modal(Some(app), &file, move |out_path| {
                         let app_reopen = app_shelf.clone();
                         DropShelf::spawn(out_path, None, move |chained_file| {
                             OverlayWindow::spawn(&app_reopen, Some(chained_file));

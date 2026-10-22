@@ -6,7 +6,7 @@ use crate::engine::format_file_size;
 use crate::engine::metadata::{inspect_file_metadata, strip_file_metadata};
 
 pub fn open_metadata_modal(
-    parent: &impl IsA<gtk4::Window>,
+    app: Option<&gtk4::Application>,
     file_path: &Path,
     on_success: impl Fn(PathBuf) + 'static,
 ) {
@@ -20,13 +20,15 @@ pub fn open_metadata_modal(
 
     let window = gtk4::Window::builder()
         .title("Metadata Inspector — Hyprdrop")
-        .transient_for(parent)
-        .modal(true)
         .default_width(620)
         .default_height(500)
         .build();
 
-    window.add_css_class("mac-window");
+    if let Some(a) = app {
+        a.add_window(&window);
+    }
+
+    window.add_css_class("hyprdrop-surface");
 
     let root_box = gtk4::Box::new(gtk4::Orientation::Vertical, 12);
     root_box.set_margin_start(18);

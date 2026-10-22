@@ -23,7 +23,7 @@ struct AddBgState {
 }
 
 pub fn open_add_bg_modal(
-    parent: &impl IsA<gtk4::Window>,
+    app: Option<&gtk4::Application>,
     image_path: &Path,
     on_success: impl Fn(PathBuf) + 'static,
 ) {
@@ -61,17 +61,19 @@ pub fn open_add_bg_modal(
     }));
 
     let window = gtk4::Window::builder()
-        .title("Add Background Studio — Hyprdrop")
-        .transient_for(parent)
-        .modal(true)
+        .title("Background Studio — Hyprdrop")
         .default_width(780)
         .default_height(860)
         .build();
 
-    window.add_css_class("mac-window");
+    if let Some(a) = app {
+        a.add_window(&window);
+    }
+
+    window.add_css_class("hyprdrop-surface");
 
     let root_box = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
-    root_box.add_css_class("mac-window");
+    root_box.add_css_class("hyprdrop-surface");
 
     // Header Bar
     let header_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 12);

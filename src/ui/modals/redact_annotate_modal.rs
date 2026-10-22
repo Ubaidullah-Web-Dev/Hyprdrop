@@ -40,7 +40,7 @@ struct StudioState {
 }
 
 pub fn open_redact_annotate_modal(
-    parent: &impl IsA<gtk4::Window>,
+    app: Option<&gtk4::Application>,
     image_path: &Path,
     on_success: impl Fn(PathBuf) + 'static,
 ) {
@@ -86,11 +86,13 @@ pub fn open_redact_annotate_modal(
 
     let window = gtk4::Window::builder()
         .title("Redact & Annotate — Hyprdrop")
-        .transient_for(parent)
-        .modal(true)
         .default_width(900)
         .default_height(650)
         .build();
+
+    if let Some(a) = app {
+        a.add_window(&window);
+    }
 
     window.add_css_class("hyprdrop-surface");
 

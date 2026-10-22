@@ -68,7 +68,7 @@ struct CropState {
 }
 
 pub fn open_crop_modal(
-    parent: &impl IsA<gtk4::Window>,
+    app: Option<&gtk4::Application>,
     image_path: &Path,
     on_success: impl Fn(PathBuf) + 'static,
 ) {
@@ -140,11 +140,13 @@ pub fn open_crop_modal(
 
     let window = gtk4::Window::builder()
         .title("Crop Image — Hyprdrop")
-        .transient_for(parent)
-        .modal(true)
         .default_width(880)
         .default_height(640)
         .build();
+
+    if let Some(a) = app {
+        a.add_window(&window);
+    }
 
     window.add_css_class("hyprdrop-surface");
 
@@ -329,42 +331,68 @@ pub fn open_crop_modal(
     });
     canvas.add_controller(motion);
 
+    let is_updating_spin = Rc::new(std::cell::Cell::new(false));
+
     // Spin Button Listeners for live user pixel inputs
     let state_w = state.clone();
     let canvas_w = canvas.clone();
     let h_spin_w = h_spin.clone();
+    let is_updating_spin_w = is_updating_spin.clone();
     w_spin.connect_value_changed(move |spin| {
-        let mut s = state_w.borrow_mut();
-        if s.is_dragging {
+        if is_updating_spin_w.get() {
             return;
         }
-        let max_w = s.orig_w - s.crop_x;
-        s.crop_w = spin.value().clamp(20.0, max_w);
-        if let Some(ratio) = s.preset.ratio() {
-            let max_h = s.orig_h - s.crop_y;
-            s.crop_h = (s.crop_w / ratio).clamp(20.0, max_h);
-            h_spin_w.set_value(s.crop_h.round());
+        is_updating_spin_w.set(true);
+        let ratio_h = {
+            let mut s = state_w.borrow_mut();
+            if s.is_dragging {
+                is_updating_spin_w.set(false);
+                return;
+            }
+            let max_w = s.orig_w - s.crop_x;
+            s.crop_w = spin.value().clamp(20.0, max_w);
+            s.preset.ratio().map(|ratio| {
+                let max_h = s.orig_h - s.crop_y;
+                let target_h = (s.crop_w / ratio).clamp(20.0, max_h);
+                s.crop_h = target_h;
+                target_h
+            })
+        };
+        if let Some(h) = ratio_h {
+            h_spin_w.set_value(h.round());
         }
-        drop(s);
+        is_updating_spin_w.set(false);
         canvas_w.queue_draw();
     });
 
     let state_h = state.clone();
     let canvas_h = canvas.clone();
     let w_spin_h = w_spin.clone();
+    let is_updating_spin_h = is_updating_spin.clone();
     h_spin.connect_value_changed(move |spin| {
-        let mut s = state_h.borrow_mut();
-        if s.is_dragging {
+        if is_updating_spin_h.get() {
             return;
         }
-        let max_h = s.orig_h - s.crop_y;
-        s.crop_h = spin.value().clamp(20.0, max_h);
-        if let Some(ratio) = s.preset.ratio() {
-            let max_w = s.orig_w - s.crop_x;
-            s.crop_w = (s.crop_h * ratio).clamp(20.0, max_w);
-            w_spin_h.set_value(s.crop_w.round());
+        is_updating_spin_h.set(true);
+        let ratio_w = {
+            let mut s = state_h.borrow_mut();
+            if s.is_dragging {
+                is_updating_spin_h.set(false);
+                return;
+            }
+            let max_h = s.orig_h - s.crop_y;
+            s.crop_h = spin.value().clamp(20.0, max_h);
+            s.preset.ratio().map(|ratio| {
+                let max_w = s.orig_w - s.crop_x;
+                let target_w = (s.crop_h * ratio).clamp(20.0, max_w);
+                s.crop_w = target_w;
+                target_w
+            })
+        };
+        if let Some(w) = ratio_w {
+            w_spin_h.set_value(w.round());
         }
-        drop(s);
+        is_updating_spin_h.set(false);
         canvas_h.queue_draw();
     });
 
@@ -377,22 +405,28 @@ pub fn open_crop_modal(
         let all_pills = pill_buttons.clone();
         let b = btn.clone();
         let h_spin_p = h_spin.clone();
+        let is_updating_spin_p = is_updating_spin.clone();
         btn.connect_clicked(move |_| {
             for (p_btn, _) in &all_pills {
                 p_btn.remove_css_class("active");
             }
             b.add_css_class("active");
 
-            let mut s = state_p.borrow_mut();
-            s.preset = preset_val;
-            if let Some(ratio) = preset_val.ratio() {
-                // Adjust crop_h to match ratio
-                let max_h = s.orig_h - s.crop_y;
-                let target_h = (s.crop_w / ratio).min(max_h);
-                s.crop_h = target_h.max(20.0);
-                h_spin_p.set_value(s.crop_h.round());
+            is_updating_spin_p.set(true);
+            let target_h = {
+                let mut s = state_p.borrow_mut();
+                s.preset = preset_val;
+                s.preset.ratio().map(|ratio| {
+                    let max_h = s.orig_h - s.crop_y;
+                    let h = (s.crop_w / ratio).min(max_h).max(20.0);
+                    s.crop_h = h;
+                    h
+                })
+            };
+            if let Some(h) = target_h {
+                h_spin_p.set_value(h.round());
             }
-            drop(s);
+            is_updating_spin_p.set(false);
             canvas_p.queue_draw();
         });
     }
@@ -410,16 +444,21 @@ pub fn open_crop_modal(
     let canvas_reset = canvas.clone();
     let w_spin_reset = w_spin.clone();
     let h_spin_reset = h_spin.clone();
+    let is_updating_spin_reset = is_updating_spin.clone();
     reset_btn.connect_clicked(move |_| {
-        let mut s = state_reset.borrow_mut();
-        let (orig_w, orig_h) = (s.orig_w, s.orig_h);
-        s.crop_w = orig_w * 0.8;
-        s.crop_h = orig_h * 0.8;
-        s.crop_x = (orig_w - s.crop_w) / 2.0;
-        s.crop_y = (orig_h - s.crop_h) / 2.0;
-        w_spin_reset.set_value(s.crop_w.round());
-        h_spin_reset.set_value(s.crop_h.round());
-        drop(s);
+        is_updating_spin_reset.set(true);
+        let (w_val, h_val) = {
+            let mut s = state_reset.borrow_mut();
+            let (orig_w, orig_h) = (s.orig_w, s.orig_h);
+            s.crop_w = orig_w * 0.8;
+            s.crop_h = orig_h * 0.8;
+            s.crop_x = (orig_w - s.crop_w) / 2.0;
+            s.crop_y = (orig_h - s.crop_h) / 2.0;
+            (s.crop_w, s.crop_h)
+        };
+        w_spin_reset.set_value(w_val.round());
+        h_spin_reset.set_value(h_val.round());
+        is_updating_spin_reset.set(false);
         canvas_reset.queue_draw();
     });
     bottom_box.append(&reset_btn);

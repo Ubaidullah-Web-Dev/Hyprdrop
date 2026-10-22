@@ -34,7 +34,7 @@ struct EditState {
 }
 
 pub fn open_quick_edit_modal(
-    parent: &impl IsA<gtk4::Window>,
+    app: Option<&gtk4::Application>,
     image_path: &Path,
     on_success: impl Fn(PathBuf) + 'static,
 ) {
@@ -73,17 +73,19 @@ pub fn open_quick_edit_modal(
     }));
 
     let window = gtk4::Window::builder()
-        .title("Quick Edit — Hyprdrop")
-        .transient_for(parent)
-        .modal(true)
+        .title("Quick Edit Studio — Hyprdrop")
         .default_width(860)
         .default_height(600)
         .build();
 
-    window.add_css_class("mac-window");
+    if let Some(a) = app {
+        a.add_window(&window);
+    }
+
+    window.add_css_class("hyprdrop-surface");
 
     let root_box = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
-    root_box.add_css_class("mac-window");
+    root_box.add_css_class("hyprdrop-surface");
 
     // macOS Header
     let header_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 12);
