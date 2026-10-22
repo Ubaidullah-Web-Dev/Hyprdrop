@@ -17,13 +17,20 @@ window.background.hyprdrop-overlay,
 window.hyprdrop-overlay.background,
 window.hyprdrop-overlay,
 .hyprdrop-overlay,
+window.hyprdrop-overlay fixed,
+.hyprdrop-overlay-fixed {
+    background-color: rgba(0, 0, 0, 0.002);
+    background: rgba(0, 0, 0, 0.002);
+    background-image: none;
+    box-shadow: none;
+    border-style: none;
+}
+
 window.hyprdrop-overlay > box,
 window.hyprdrop-overlay > contents,
 window.hyprdrop-overlay decoration,
 window.hyprdrop-overlay widget,
 window.hyprdrop-overlay drawingarea,
-window.hyprdrop-overlay fixed,
-.hyprdrop-overlay-fixed,
 .hyprdrop-radial-canvas {
     background-color: transparent;
     background: transparent;

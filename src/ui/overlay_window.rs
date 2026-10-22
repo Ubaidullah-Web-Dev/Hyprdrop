@@ -79,6 +79,8 @@ impl OverlayWindow {
         let radial = Rc::new(RadialMenu::new_with_files(preloaded_files));
 
         let fixed = gtk4::Fixed::new();
+        fixed.set_hexpand(true);
+        fixed.set_vexpand(true);
         fixed.add_css_class("hyprdrop-overlay-fixed");
         fixed.put(&radial.widget, pos_x, pos_y);
 
@@ -293,17 +295,6 @@ impl OverlayWindow {
             }
         });
         window.add_controller(bg_drop_target);
-
-        // Auto-dismiss overlay if window loses active focus
-        let win_focus = window.clone();
-        let was_active = std::rc::Rc::new(std::cell::Cell::new(false));
-        window.connect_is_active_notify(move |w| {
-            if w.is_active() {
-                was_active.set(true);
-            } else if was_active.get() {
-                win_focus.close();
-            }
-        });
 
         let win_weak = window.downgrade();
         window.connect_destroy(move |_| {
