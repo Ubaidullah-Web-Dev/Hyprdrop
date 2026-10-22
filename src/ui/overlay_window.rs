@@ -12,7 +12,7 @@ use crate::engine::ocr_clipboard::{copy_image_to_clipboard, ocr_image_and_copy};
 use crate::engine::{
     execute_conversion_batch, get_conversion_slices, get_quick_action_slices,
 };
-use crate::hyprland::layer_shell::configure_layer_shell_window;
+use crate::hyprland::layer_shell::configure_fullscreen_layer_shell_overlay;
 use crate::ui::drop_shelf::DropShelf;
 use crate::ui::modals::{
     open_add_bg_modal, open_crop_modal, open_metadata_modal, open_quick_edit_modal,
@@ -69,18 +69,20 @@ impl OverlayWindow {
         let window = gtk4::ApplicationWindow::builder()
             .application(app)
             .title("Hyprdrop Overlay")
-            .default_width(RADIAL_SIZE)
-            .default_height(RADIAL_SIZE)
             .resizable(false)
             .decorated(false)
             .build();
 
         window.add_css_class("hyprdrop-overlay");
-        configure_layer_shell_window(&window, RADIAL_SIZE, RADIAL_SIZE, None);
+        let (pos_x, pos_y) = configure_fullscreen_layer_shell_overlay(&window, RADIAL_SIZE, RADIAL_SIZE, None);
 
         let radial = Rc::new(RadialMenu::new_with_files(preloaded_files));
 
-        // Click Gesture on Radial Menu
+        let fixed = gtk4::Fixed::new();
+        fixed.add_css_class("hyprdrop-overlay-fixed");
+        fixed.put(&radial.widget, pos_x, pos_y);
+
+        // Click Gesture on the fullscreen overlay window - clicking anywhere outside wheel dismisses immediately
         let click = gtk4::GestureClick::new();
         click.set_button(0); // All buttons (left, right, middle)
 
@@ -89,12 +91,8 @@ impl OverlayWindow {
         let app_click = app.clone();
 
         click.connect_pressed(move |gesture, _, x, y| {
-            let button = gesture.current_button();
-            if button == gdk::BUTTON_SECONDARY {
-                // Right-Click flips mode
-                radial_click.toggle_mode();
-                return;
-            }
+            let cx = pos_x + (RADIAL_SIZE as f64) / 2.0;
+            let cy = pos_y + (RADIAL_SIZE as f64) / 2.0;
 
             let s = radial_click.state.borrow();
             let slices = match s.mode {
@@ -102,9 +100,22 @@ impl OverlayWindow {
                 RadialMode::QuickActions => get_quick_action_slices(s.file_category),
             };
 
-            let cx = (RADIAL_SIZE as f64) / 2.0;
-            let cy = (RADIAL_SIZE as f64) / 2.0;
             let hit = hit_test(x, y, cx, cy, INNER_RADIUS, OUTER_RADIUS, slices.len());
+
+            let button = gesture.current_button();
+            if button == gdk::BUTTON_SECONDARY {
+                match hit {
+                    HitZone::CenterHub | HitZone::Slice(_) => {
+                        drop(s);
+                        radial_click.toggle_mode();
+                    }
+                    HitZone::Outside => {
+                        drop(s);
+                        win_click.close();
+                    }
+                }
+                return;
+            }
 
             match hit {
                 HitZone::CenterHub => {
@@ -130,13 +141,13 @@ impl OverlayWindow {
                     }
                 }
                 HitZone::Outside => {
-                    // Click outside dismisses
+                    // Click outside dismisses immediately
                     drop(s);
                     win_click.close();
                 }
             }
         });
-        radial.widget.add_controller(click);
+        window.add_controller(click);
 
         // Drop Target for files dragged into the radial overlay
         let drop_target = gtk4::DropTarget::new(
@@ -258,7 +269,41 @@ impl OverlayWindow {
         });
         window.add_controller(key_controller);
 
-        window.set_child(Some(&radial.widget));
+        window.set_child(Some(&fixed));
+
+        // Background Drop Target on fullscreen overlay to catch files dropped anywhere
+        let bg_drop_target = gtk4::DropTarget::new(
+            glib::types::Type::INVALID,
+            gdk::DragAction::COPY | gdk::DragAction::MOVE,
+        );
+        bg_drop_target.set_preload(true);
+        bg_drop_target.set_types(&[
+            gdk::FileList::static_type(),
+            gio::File::static_type(),
+            glib::types::Type::STRING,
+        ]);
+        let radial_bg_drop = radial.clone();
+        bg_drop_target.connect_drop(move |_, val, _, _| {
+            let paths = extract_paths_from_drop_value(val);
+            if !paths.is_empty() {
+                radial_bg_drop.set_files(paths);
+                true
+            } else {
+                false
+            }
+        });
+        window.add_controller(bg_drop_target);
+
+        // Auto-dismiss overlay if window loses active focus
+        let win_focus = window.clone();
+        let was_active = std::rc::Rc::new(std::cell::Cell::new(false));
+        window.connect_is_active_notify(move |w| {
+            if w.is_active() {
+                was_active.set(true);
+            } else if was_active.get() {
+                win_focus.close();
+            }
+        });
 
         let win_weak = window.downgrade();
         window.connect_destroy(move |_| {

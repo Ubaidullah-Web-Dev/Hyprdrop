@@ -22,6 +22,8 @@ window.hyprdrop-overlay > contents,
 window.hyprdrop-overlay decoration,
 window.hyprdrop-overlay widget,
 window.hyprdrop-overlay drawingarea,
+window.hyprdrop-overlay fixed,
+.hyprdrop-overlay-fixed,
 .hyprdrop-radial-canvas {
     background-color: transparent;
     background: transparent;
