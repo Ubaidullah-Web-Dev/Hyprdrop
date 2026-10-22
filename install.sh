@@ -9,6 +9,7 @@ set -euo pipefail
 MODE="user"
 DO_UNINSTALL=false
 BUILD_RELEASE=true
+USE_PRECOMPILED=false
 
 show_help() {
     cat << EOF
@@ -18,16 +19,22 @@ Usage:
   ./install.sh [options]
 
 Options:
-  --user         Install to ~/.local/bin and user directories (Default, no root required)
-  --system       Install globally to /usr/local/bin (Requires sudo/root)
-  --no-build     Skip building binaries and install existing target/release artifacts
-  --uninstall    Cleanly remove installed Hyprdrop files, services, and desktop entries
-  -h, --help     Show this help message
+  --bin, --precompiled  Install prebuilt binary from latest GitHub release (Instant, no Rust needed)
+  --user                Install to ~/.local/bin and user directories (Default, no root required)
+  --system              Install globally to /usr/local/bin (Requires sudo/root)
+  --no-build            Skip building binaries and install existing target/release artifacts
+  --uninstall           Cleanly remove installed Hyprdrop files, services, and desktop entries
+  -h, --help            Show this help message
 EOF
 }
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
+        --bin|--precompiled)
+            USE_PRECOMPILED=true
+            BUILD_RELEASE=false
+            shift
+            ;;
         --user)
             MODE="user"
             shift
@@ -122,46 +129,72 @@ echo ""
 
 mkdir -p "${BIN_DIR}" "${APP_DIR}" "${SYSTEMD_DIR}" "${ICON_DIR}/scalable/apps"
 
-# 1. Build release binary if requested
-if [ "$BUILD_RELEASE" = true ]; then
-    if [ ! -f "target/release/hyprdrop" ] || [ ! -f "target/release/hyprdrop-detect-selection" ]; then
-        echo "==> Compiling optimized release binary with LTO..."
-        cargo build --release
-    fi
+# 1. Prepare binaries (Precompiled download vs local compilation)
+if [ "$BUILD_RELEASE" = true ] && ! command -v cargo >/dev/null 2>&1 && [ ! -f "target/release/hyprdrop" ]; then
+    echo "==> Cargo (Rust) is not installed. Switching to precompiled release binary..."
+    USE_PRECOMPILED=true
+    BUILD_RELEASE=false
 fi
 
-# Ensure helper binary is compiled
-if [ ! -f "target/release/hyprdrop-detect-selection" ]; then
-    echo "==> Compiling native hyprdrop-detect-selection helper..."
-    gcc -O3 c/hyprdrop-detect-selection.c $(pkg-config --cflags --libs atspi-2 gobject-2.0 glib-2.0) -o target/release/hyprdrop-detect-selection
+if [ "$USE_PRECOMPILED" = true ]; then
+    echo "==> Fetching latest precompiled release from GitHub..."
+    TARBALL_URL=$(curl -s https://api.github.com/repos/Ubaidullah-Web-Dev/Hyprdrop/releases/latest | grep "browser_download_url.*tar.gz" | head -n 1 | cut -d '"' -f 4)
+    if [ -z "$TARBALL_URL" ]; then
+        TARBALL_URL="https://github.com/Ubaidullah-Web-Dev/Hyprdrop/releases/download/v0.1.0/hyprdrop-v0.1.0-linux-x86_64.tar.gz"
+    fi
+    TEMP_EXTRACT="$(mktemp -d)"
+    trap 'rm -rf "${TEMP_EXTRACT}"' EXIT
+    echo "==> Downloading from: ${TARBALL_URL}"
+    curl -fsSL "${TARBALL_URL}" | tar -xz -C "${TEMP_EXTRACT}"
+
+    HYPRDROP_BIN="${TEMP_EXTRACT}/hyprdrop"
+    HELPER_BIN="${TEMP_EXTRACT}/hyprdrop-detect-selection"
+    ASSETS_SRC="${TEMP_EXTRACT}/assets"
+else
+    if [ "$BUILD_RELEASE" = true ]; then
+        if [ ! -f "target/release/hyprdrop" ] || [ ! -f "target/release/hyprdrop-detect-selection" ]; then
+            echo "==> Compiling optimized release binary with LTO..."
+            cargo build --release
+        fi
+    fi
+
+    # Ensure helper binary is compiled
+    if [ ! -f "target/release/hyprdrop-detect-selection" ]; then
+        echo "==> Compiling native hyprdrop-detect-selection helper..."
+        gcc -O3 c/hyprdrop-detect-selection.c $(pkg-config --cflags --libs atspi-2 gobject-2.0 glib-2.0) -o target/release/hyprdrop-detect-selection
+    fi
+
+    HYPRDROP_BIN="target/release/hyprdrop"
+    HELPER_BIN="target/release/hyprdrop-detect-selection"
+    ASSETS_SRC="assets"
 fi
 
 # 2. Install binaries
 echo "==> Installing hyprdrop binaries to ${BIN_DIR}..."
 if [ -w "${BIN_DIR}" ] || [ -w "$(dirname "${BIN_DIR}")" ]; then
-    install -Dm755 "target/release/hyprdrop" "${BIN_DIR}/hyprdrop"
-    install -Dm755 "target/release/hyprdrop-detect-selection" "${BIN_DIR}/hyprdrop-detect-selection"
+    install -Dm755 "${HYPRDROP_BIN}" "${BIN_DIR}/hyprdrop"
+    install -Dm755 "${HELPER_BIN}" "${BIN_DIR}/hyprdrop-detect-selection"
 else
     echo "Requesting sudo privileges for ${BIN_DIR} installation..."
-    sudo install -Dm755 "target/release/hyprdrop" "${BIN_DIR}/hyprdrop"
-    sudo install -Dm755 "target/release/hyprdrop-detect-selection" "${BIN_DIR}/hyprdrop-detect-selection"
+    sudo install -Dm755 "${HYPRDROP_BIN}" "${BIN_DIR}/hyprdrop"
+    sudo install -Dm755 "${HELPER_BIN}" "${BIN_DIR}/hyprdrop-detect-selection"
 fi
 
 # 3. Install desktop entry and icons
 echo "==> Installing desktop entry and high-resolution icons..."
-install -Dm644 "assets/hyprdrop.desktop" "${APP_DIR}/hyprdrop.desktop"
-install -Dm644 "assets/hyprdrop.svg" "${ICON_DIR}/scalable/apps/hyprdrop.svg"
+install -Dm644 "${ASSETS_SRC}/hyprdrop.desktop" "${APP_DIR}/hyprdrop.desktop"
+install -Dm644 "${ASSETS_SRC}/hyprdrop.svg" "${ICON_DIR}/scalable/apps/hyprdrop.svg"
 
 for s in 16 24 32 48 64 128 256 512; do
-    if [ -f "assets/icons/hicolor/${s}x${s}/apps/hyprdrop.png" ]; then
+    if [ -f "${ASSETS_SRC}/icons/hicolor/${s}x${s}/apps/hyprdrop.png" ]; then
         mkdir -p "${ICON_DIR}/${s}x${s}/apps"
-        install -Dm644 "assets/icons/hicolor/${s}x${s}/apps/hyprdrop.png" "${ICON_DIR}/${s}x${s}/apps/hyprdrop.png"
+        install -Dm644 "${ASSETS_SRC}/icons/hicolor/${s}x${s}/apps/hyprdrop.png" "${ICON_DIR}/${s}x${s}/apps/hyprdrop.png"
     fi
 done
 
 # 4. Install systemd user service
 echo "==> Installing systemd user daemon service..."
-sed "s|ExecStart=.*|ExecStart=${BIN_DIR}/hyprdrop --daemon|g" assets/hyprdrop.service > "${SYSTEMD_DIR}/hyprdrop.service"
+sed "s|ExecStart=.*|ExecStart=${BIN_DIR}/hyprdrop --daemon|g" "${ASSETS_SRC}/hyprdrop.service" > "${SYSTEMD_DIR}/hyprdrop.service"
 
 # Reload desktop and icon databases
 if command -v update-desktop-database >/dev/null 2>&1; then

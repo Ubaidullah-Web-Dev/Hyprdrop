@@ -62,6 +62,28 @@ impl HyprdropApp {
                     }
                     Commands::Toggle => Some(IpcMessage::Toggle),
                     Commands::Settings => Some(IpcMessage::Settings),
+                    Commands::Update => {
+                        println!("==> Checking for and installing latest Hyprdrop release...");
+                        let script = "curl -fsSL https://raw.githubusercontent.com/Ubaidullah-Web-Dev/Hyprdrop/main/install.sh | bash -s -- --bin";
+                        let status = std::process::Command::new("bash")
+                            .arg("-c")
+                            .arg(script)
+                            .status();
+                        match status {
+                            Ok(s) if s.success() => {
+                                println!("\n==> Hyprdrop updated successfully!");
+                                return glib::ExitCode::SUCCESS;
+                            }
+                            Ok(s) => {
+                                eprintln!("\n==> Update failed with status code: {}", s);
+                                return glib::ExitCode::FAILURE;
+                            }
+                            Err(e) => {
+                                eprintln!("\n==> Failed to execute updater: {}", e);
+                                return glib::ExitCode::FAILURE;
+                            }
+                        }
+                    }
                 }
             } else if let Some(ref f) = cli.file {
                 Some(IpcMessage::Trigger {
@@ -109,7 +131,7 @@ impl HyprdropApp {
                 Self::start_daemon_loop(app);
             } else if let Some(ref cmd) = cli_activate.command {
                 match cmd {
-                    Commands::Setup => {
+                    Commands::Setup | Commands::Update => {
                         return;
                     }
                     Commands::Trigger { file } => {

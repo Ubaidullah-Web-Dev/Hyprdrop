@@ -19,7 +19,7 @@ pkgbase = hyprdrop-bin
 	provides = hyprdrop
 	conflicts = hyprdrop
 	conflicts = hyprdrop-git
-	source = hyprdrop-bin-0.1.0.tar.gz::https://github.com/Ubaidullah-Web-Dev/Hyprdrop/releases/download/v0.1.0/hyprdrop-v0.1.0-x86_64-unknown-linux-gnu.tar.gz
-	sha256sums = d7b9376477cf48bb87cc909f85c4d5d4057a7bc26f7570e2a31532ac4730cb83
+	source = hyprdrop-bin-0.1.0.tar.gz::https://github.com/Ubaidullah-Web-Dev/Hyprdrop/releases/download/v0.1.0/hyprdrop-v0.1.0-linux-x86_64.tar.gz
+	sha256sums = c5c7b3f11011cad40940045902b2700651495091bbcd3f33be07b0a6a1dc18e3
 
 pkgname = hyprdrop-bin

@@ -9,7 +9,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "${ROOT_DIR}"
 
 VERSION="$(grep -m1 '^version' Cargo.toml | cut -d '"' -f 2)"
-TAR_NAME="hyprdrop-v${VERSION}-x86_64-unknown-linux-gnu.tar.gz"
+TAR_NAME="hyprdrop-v${VERSION}-linux-x86_64.tar.gz"
 DIST_DIR="${ROOT_DIR}/dist"
 
 echo "==> Building Hyprdrop v${VERSION} release artifacts..."

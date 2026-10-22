@@ -87,7 +87,7 @@ jobs:
           ./packaging/scripts/create-release-tarball.sh
 
           VERSION="$(grep -m1 '^version' Cargo.toml | cut -d '"' -f 2)"
-          TAR_NAME="hyprdrop-v${VERSION}-x86_64-unknown-linux-gnu.tar.gz"
+          TAR_NAME="hyprdrop-v${VERSION}-linux-x86_64.tar.gz"
           SHA256="$(cat dist/${TAR_NAME}.sha256 | awk '{print $1}')"
 
           echo "tar_name=${TAR_NAME}" >> "$GITHUB_OUTPUT"

@@ -1,7 +1,7 @@
 # Design System: Hyprdrop (`hyprdrop`)
 
 ## 1. Visual Theme & Atmosphere
-An industrial-grade, tactical Wayland studio utility built for Hyprland.
+A precision-engineered, tactical Wayland studio utility built for Hyprland.
 The atmosphere is restrained, surgical, and responsive — inspired by precision measurement tools and high-end hardware audio interfaces.
 The radial wheel and modal surfaces use a darkened studio graphite backdrop (`#161618`) with 92% alpha to leverage Hyprland's native dual-cavity background blur.
 Active interactions and targeted format slices illuminate with International Warm Orange (`#FF5722`), providing instantaneous spatial feedback without distraction.

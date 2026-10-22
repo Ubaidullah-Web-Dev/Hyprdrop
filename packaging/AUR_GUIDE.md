@@ -80,7 +80,7 @@ The GitHub Actions workflow (`.github/workflows/ci-and-aur.yml`) handles everyth
 
 ### 2. On New Version Tags (`v*`, e.g. `git tag v0.1.1 && git push origin v0.1.1`)
 - Compiles the optimized release binary with LTO.
-- Creates `hyprdrop-v0.1.1-x86_64-unknown-linux-gnu.tar.gz` and computes SHA256.
+- Creates `hyprdrop-v0.1.1-linux-x86_64.tar.gz` and computes SHA256.
 - Publishes the release and assets to GitHub Releases.
 - Clones `ssh://aur@aur.archlinux.org/hyprdrop-bin.git`.
 - Automatically bumps `pkgver` and injects the SHA256 checksum into `PKGBUILD`.

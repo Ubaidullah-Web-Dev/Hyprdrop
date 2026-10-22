@@ -31,4 +31,6 @@ pub enum Commands {
     /// Automatically configures Hyprland rules and mouse keybinds
     #[command(alias = "configure")]
     Setup,
+    /// Checks for and installs the latest Hyprdrop release
+    Update,
 }
