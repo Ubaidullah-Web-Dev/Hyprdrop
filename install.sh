@@ -72,6 +72,18 @@ APP_DIR="${DATA_DIR}/applications"
 ICON_DIR="${DATA_DIR}/icons/hicolor"
 
 # ------------------------------------------------------------------------------
+# Handle Remote Execution (e.g. curl -fsSL ... | bash)
+# ------------------------------------------------------------------------------
+if [ "$DO_UNINSTALL" = false ] && [ ! -f "Cargo.toml" ] && [ ! -f "target/release/hyprdrop" ]; then
+    echo "==> Hyprdrop source not found in current directory."
+    echo "==> Fetching latest Hyprdrop source from GitHub..."
+    TEMP_CLONE="$(mktemp -d)"
+    trap 'rm -rf "${TEMP_CLONE}"' EXIT
+    git clone --depth=1 https://github.com/Ubaidullah-Web-Dev/Hyprdrop.git "${TEMP_CLONE}"
+    cd "${TEMP_CLONE}"
+fi
+
+# ------------------------------------------------------------------------------
 # Handle Uninstallation
 # ------------------------------------------------------------------------------
 if [ "$DO_UNINSTALL" = true ]; then
