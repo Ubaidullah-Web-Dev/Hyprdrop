@@ -77,7 +77,7 @@ pub fn get_quick_action_slices(_category: FileCategory) -> &'static [&'static st
         "ADD BG",
         "COMPRESS",
         "REDACT",
-        "ANNOTATE",
+        "AUTO TRIM",
         "METADATA",
         "EDIT",
         "OCR / COPY",

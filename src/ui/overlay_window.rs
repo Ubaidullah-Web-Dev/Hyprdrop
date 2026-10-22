@@ -595,7 +595,7 @@ fn handle_slice_activation(
                         });
                     });
                 }
-                "REDACT" | "ANNOTATE" => {
+                "REDACT" => {
                     let app_shelf = app.clone();
                     let file = first_file.clone();
                     window.close();
@@ -604,6 +604,28 @@ fn handle_slice_activation(
                         DropShelf::spawn(out_path, None, move |chained_file| {
                             OverlayWindow::spawn(&app_reopen, Some(chained_file));
                         });
+                    });
+                }
+                "AUTO TRIM" => {
+                    let src = first_file.clone();
+                    window.close();
+                    std::thread::spawn(move || {
+                        if let Ok(img) = crate::engine::image_ops::load_image(&src) {
+                            let rgba = img.to_rgba8();
+                            let trimmed = crate::engine::image_ops::auto_trim_transparent(&rgba);
+                            let out_path = crate::engine::naming::get_suffixed_output_path(&src, "Trimmed", Some("png"));
+                            if trimmed.save(&out_path).is_ok() {
+                                let _ = ConfigManager::append_history("AUTO TRIM", &src, &out_path, None);
+                                glib::idle_add_once(move || {
+                                    DropShelf::spawn(out_path, Some("Auto-Trimmed".to_string()), move |chained_file| {
+                                        if let Some(active_app) = gio::Application::default()
+                                            .and_then(|a| a.downcast::<gtk4::Application>().ok()) {
+                                            OverlayWindow::spawn(&active_app, Some(chained_file));
+                                        }
+                                    });
+                                });
+                            }
+                        }
                     });
                 }
                 "METADATA" => {
@@ -632,8 +654,24 @@ fn handle_slice_activation(
                     window.close();
                     let src = first_file.clone();
                     std::thread::spawn(move || {
-                        if ocr_image_and_copy(&src).is_err() {
-                            let _ = copy_image_to_clipboard(&src);
+                        match ocr_image_and_copy(&src) {
+                            Ok(text) => {
+                                let preview = if text.chars().count() > 80 {
+                                    format!("{}…", text.chars().take(80).collect::<String>())
+                                } else {
+                                    text.clone()
+                                };
+                                let _ = std::process::Command::new("notify-send")
+                                    .args(["-a", "Hyprdrop", "-i", "edit-copy-symbolic", "OCR Text Copied to Clipboard", &preview])
+                                    .spawn();
+                            }
+                            Err(_) => {
+                                if copy_image_to_clipboard(&src).is_ok() {
+                                    let _ = std::process::Command::new("notify-send")
+                                        .args(["-a", "Hyprdrop", "-i", "image-x-generic-symbolic", "Image Copied to Clipboard", "Image copied with MIME image/png"])
+                                        .spawn();
+                                }
+                            }
                         }
                     });
                 }

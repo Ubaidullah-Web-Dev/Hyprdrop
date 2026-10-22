@@ -338,12 +338,13 @@ pub fn open_crop_modal(
     let canvas_w = canvas.clone();
     let h_spin_w = h_spin.clone();
     let is_updating_spin_w = is_updating_spin.clone();
+    let w_spin_self = w_spin.clone();
     w_spin.connect_value_changed(move |spin| {
         if is_updating_spin_w.get() {
             return;
         }
         is_updating_spin_w.set(true);
-        let ratio_h = {
+        let updated_dims = {
             let mut s = state_w.borrow_mut();
             if s.is_dragging {
                 is_updating_spin_w.set(false);
@@ -351,15 +352,24 @@ pub fn open_crop_modal(
             }
             let max_w = s.orig_w - s.crop_x;
             s.crop_w = spin.value().clamp(20.0, max_w);
-            s.preset.ratio().map(|ratio| {
+            if let Some(ratio) = s.preset.ratio() {
                 let max_h = s.orig_h - s.crop_y;
-                let target_h = (s.crop_w / ratio).clamp(20.0, max_h);
+                let mut target_h = s.crop_w / ratio;
+                if target_h > max_h {
+                    target_h = max_h;
+                    s.crop_w = (target_h * ratio).min(max_w);
+                }
                 s.crop_h = target_h;
-                target_h
-            })
+                Some((s.crop_w, s.crop_h))
+            } else {
+                None
+            }
         };
-        if let Some(h) = ratio_h {
-            h_spin_w.set_value(h.round());
+        if let Some((w_val, h_val)) = updated_dims {
+            if (w_spin_self.value() - w_val).abs() >= 1.0 {
+                w_spin_self.set_value(w_val.round());
+            }
+            h_spin_w.set_value(h_val.round());
         }
         is_updating_spin_w.set(false);
         canvas_w.queue_draw();
@@ -369,12 +379,13 @@ pub fn open_crop_modal(
     let canvas_h = canvas.clone();
     let w_spin_h = w_spin.clone();
     let is_updating_spin_h = is_updating_spin.clone();
+    let h_spin_self = h_spin.clone();
     h_spin.connect_value_changed(move |spin| {
         if is_updating_spin_h.get() {
             return;
         }
         is_updating_spin_h.set(true);
-        let ratio_w = {
+        let updated_dims = {
             let mut s = state_h.borrow_mut();
             if s.is_dragging {
                 is_updating_spin_h.set(false);
@@ -382,15 +393,24 @@ pub fn open_crop_modal(
             }
             let max_h = s.orig_h - s.crop_y;
             s.crop_h = spin.value().clamp(20.0, max_h);
-            s.preset.ratio().map(|ratio| {
+            if let Some(ratio) = s.preset.ratio() {
                 let max_w = s.orig_w - s.crop_x;
-                let target_w = (s.crop_h * ratio).clamp(20.0, max_w);
+                let mut target_w = s.crop_h * ratio;
+                if target_w > max_w {
+                    target_w = max_w;
+                    s.crop_h = (target_w / ratio).min(max_h);
+                }
                 s.crop_w = target_w;
-                target_w
-            })
+                Some((s.crop_w, s.crop_h))
+            } else {
+                None
+            }
         };
-        if let Some(w) = ratio_w {
-            w_spin_h.set_value(w.round());
+        if let Some((w_val, h_val)) = updated_dims {
+            if (h_spin_self.value() - h_val).abs() >= 1.0 {
+                h_spin_self.set_value(h_val.round());
+            }
+            w_spin_h.set_value(w_val.round());
         }
         is_updating_spin_h.set(false);
         canvas_h.queue_draw();
@@ -404,6 +424,7 @@ pub fn open_crop_modal(
         let canvas_p = canvas.clone();
         let all_pills = pill_buttons.clone();
         let b = btn.clone();
+        let w_spin_p = w_spin.clone();
         let h_spin_p = h_spin.clone();
         let is_updating_spin_p = is_updating_spin.clone();
         btn.connect_clicked(move |_| {
@@ -413,18 +434,37 @@ pub fn open_crop_modal(
             b.add_css_class("active");
 
             is_updating_spin_p.set(true);
-            let target_h = {
+            let dims = {
                 let mut s = state_p.borrow_mut();
                 s.preset = preset_val;
-                s.preset.ratio().map(|ratio| {
-                    let max_h = s.orig_h - s.crop_y;
-                    let h = (s.crop_w / ratio).min(max_h).max(20.0);
-                    s.crop_h = h;
-                    h
-                })
+                if let Some(ratio) = preset_val.ratio() {
+                    let img_w = s.orig_w;
+                    let img_h = s.orig_h;
+                    let (target_w, target_h) = if (img_w / img_h) >= ratio {
+                        // Image is wider than ratio: height is limiting
+                        let h = (img_h * 0.85).max(24.0);
+                        let w = (h * ratio).min(img_w);
+                        (w, w / ratio)
+                    } else {
+                        // Image is taller than ratio: width is limiting
+                        let w = (img_w * 0.85).max(24.0);
+                        let h = (w / ratio).min(img_h);
+                        (h * ratio, h)
+                    };
+
+                    s.crop_w = target_w.round();
+                    s.crop_h = target_h.round();
+                    s.crop_x = ((img_w - s.crop_w) / 2.0).clamp(0.0, img_w - s.crop_w).round();
+                    s.crop_y = ((img_h - s.crop_h) / 2.0).clamp(0.0, img_h - s.crop_h).round();
+
+                    Some((s.crop_w, s.crop_h))
+                } else {
+                    None
+                }
             };
-            if let Some(h) = target_h {
-                h_spin_p.set_value(h.round());
+            if let Some((w_val, h_val)) = dims {
+                w_spin_p.set_value(w_val);
+                h_spin_p.set_value(h_val);
             }
             is_updating_spin_p.set(false);
             canvas_p.queue_draw();
@@ -600,11 +640,27 @@ fn update_crop_rect(s: &mut CropState, dx: f64, dy: f64, img_w: f64, img_h: f64)
         DragHandle::Right => {
             s.crop_w = (s.init_crop_w + dx).clamp(min_dim, img_w - s.crop_x);
         }
-        DragHandle::None => {}
+        DragHandle::None => return,
     }
 
     if let Some(ratio) = s.preset.ratio() {
-        s.crop_h = (s.crop_w / ratio).min(img_h - s.crop_y);
+        let max_w = (img_w - s.crop_x).max(min_dim);
+        let max_h = (img_h - s.crop_y).max(min_dim);
+
+        let mut target_w = s.crop_w;
+        let mut target_h = target_w / ratio;
+
+        if target_h > max_h {
+            target_h = max_h;
+            target_w = target_h * ratio;
+        }
+        if target_w > max_w {
+            target_w = max_w;
+            target_h = target_w / ratio;
+        }
+
+        s.crop_w = target_w.max(min_dim);
+        s.crop_h = target_h.max(min_dim);
     }
 }
 

@@ -75,7 +75,7 @@ pub fn open_quick_edit_modal(
     let window = gtk4::Window::builder()
         .title("Quick Edit Studio — Hyprdrop")
         .default_width(860)
-        .default_height(600)
+        .default_height(680)
         .build();
 
     if let Some(a) = app {
@@ -87,11 +87,11 @@ pub fn open_quick_edit_modal(
     let root_box = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
     root_box.add_css_class("hyprdrop-surface");
 
-    // macOS Header
+    // 1. Header Bar
     let header_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 12);
-    header_box.set_margin_start(18);
-    header_box.set_margin_end(18);
-    header_box.set_margin_top(14);
+    header_box.set_margin_start(20);
+    header_box.set_margin_end(20);
+    header_box.set_margin_top(16);
     header_box.set_margin_bottom(12);
 
     let title_icon = gtk4::Image::from_icon_name("preferences-color-symbolic");
@@ -115,14 +115,13 @@ pub fn open_quick_edit_modal(
 
     root_box.append(&header_box);
 
-    let body_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
-    body_box.set_vexpand(true);
-    body_box.set_hexpand(true);
-
-    // Preview canvas
+    // 2. Fixed Image Preview Canvas at Top
     let canvas_box = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
+    canvas_box.set_margin_start(20);
+    canvas_box.set_margin_end(20);
+    canvas_box.set_margin_bottom(12);
+    canvas_box.set_size_request(740, 340);
     canvas_box.set_hexpand(true);
-    canvas_box.set_vexpand(true);
 
     let canvas = gtk4::DrawingArea::builder()
         .hexpand(true)
@@ -135,36 +134,30 @@ pub fn open_quick_edit_modal(
         draw_edit_canvas(cr, w as f64, h as f64, &s);
     });
     canvas_box.append(&canvas);
-    body_box.append(&canvas_box);
+    root_box.append(&canvas_box);
 
-    // Sidebar
-    let sidebar = gtk4::Box::new(gtk4::Orientation::Vertical, 12);
-    sidebar.set_width_request(280);
-    sidebar.set_margin_start(16);
-    sidebar.set_margin_end(16);
-    sidebar.set_margin_top(16);
-    sidebar.set_margin_bottom(16);
-    sidebar.add_css_class("mac-card");
+    // 3. Scrollable Controls Area
+    let controls_box = gtk4::Box::new(gtk4::Orientation::Vertical, 16);
+    controls_box.set_margin_start(24);
+    controls_box.set_margin_end(24);
+    controls_box.set_margin_bottom(20);
 
-    let title_lbl = gtk4::Label::new(Some("Quick Adjustments"));
-    title_lbl.add_css_class("hyprdrop-title");
-    title_lbl.set_halign(gtk4::Align::Start);
-    sidebar.append(&title_lbl);
-
+    // Dynamic resolution label
     let dim_lbl = gtk4::Label::new(Some(&format!("{}×{} px", init_w, init_h)));
     dim_lbl.add_css_class("hyprdrop-mono");
     dim_lbl.set_hexpand(true);
     dim_lbl.set_halign(gtk4::Align::End);
 
-    // Rotation & Flip buttons
-    let transform_lbl = gtk4::Label::new(Some("Orientation"));
-    transform_lbl.add_css_class("hyprdrop-subtitle");
+    // Section 1: Orientation & Geometry
+    let transform_lbl = gtk4::Label::new(Some("ORIENTATION & GEOMETRY"));
+    transform_lbl.add_css_class("mac-section-header");
     transform_lbl.set_halign(gtk4::Align::Start);
-    sidebar.append(&transform_lbl);
+    controls_box.append(&transform_lbl);
 
-    let t_row1 = gtk4::Box::new(gtk4::Orientation::Horizontal, 6);
+    let t_row = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
+
     let rot90_btn = gtk4::Button::with_label("Rotate 90°");
-    rot90_btn.add_css_class("hyprdrop-secondary");
+    rot90_btn.add_css_class("hyprdrop-pill");
     rot90_btn.set_hexpand(true);
     let state_rot = state.clone();
     let canvas_rot = canvas.clone();
@@ -180,10 +173,10 @@ pub fn open_quick_edit_modal(
         drop(s);
         canvas_rot.queue_draw();
     });
-    t_row1.append(&rot90_btn);
+    t_row.append(&rot90_btn);
 
     let rot180_btn = gtk4::Button::with_label("Rotate 180°");
-    rot180_btn.add_css_class("hyprdrop-secondary");
+    rot180_btn.add_css_class("hyprdrop-pill");
     rot180_btn.set_hexpand(true);
     let state_rot180 = state.clone();
     let canvas_rot180 = canvas.clone();
@@ -194,12 +187,10 @@ pub fn open_quick_edit_modal(
         drop(s);
         canvas_rot180.queue_draw();
     });
-    t_row1.append(&rot180_btn);
-    sidebar.append(&t_row1);
+    t_row.append(&rot180_btn);
 
-    let t_row2 = gtk4::Box::new(gtk4::Orientation::Horizontal, 6);
     let fliph_btn = gtk4::Button::with_label("Flip Horiz");
-    fliph_btn.add_css_class("hyprdrop-secondary");
+    fliph_btn.add_css_class("hyprdrop-pill");
     fliph_btn.set_hexpand(true);
     let state_fliph = state.clone();
     let canvas_fliph = canvas.clone();
@@ -210,10 +201,10 @@ pub fn open_quick_edit_modal(
         drop(s);
         canvas_fliph.queue_draw();
     });
-    t_row2.append(&fliph_btn);
+    t_row.append(&fliph_btn);
 
     let flipv_btn = gtk4::Button::with_label("Flip Vert");
-    flipv_btn.add_css_class("hyprdrop-secondary");
+    flipv_btn.add_css_class("hyprdrop-pill");
     flipv_btn.set_hexpand(true);
     let state_flipv = state.clone();
     let canvas_flipv = canvas.clone();
@@ -224,51 +215,11 @@ pub fn open_quick_edit_modal(
         drop(s);
         canvas_flipv.queue_draw();
     });
-    t_row2.append(&flipv_btn);
-    sidebar.append(&t_row2);
+    t_row.append(&flipv_btn);
 
-    // Quick Resize Section
-    let resize_header = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
-    let resize_lbl = gtk4::Label::new(Some("Quick Resize"));
-    resize_lbl.add_css_class("hyprdrop-subtitle");
-    resize_header.append(&resize_lbl);
-    resize_header.append(&dim_lbl);
-    sidebar.append(&resize_header);
-
-    let resize_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 4);
-    let scales = [
-        ("25%", 0.25f64),
-        ("50%", 0.50f64),
-        ("75%", 0.75f64),
-        ("150%", 1.50f64),
-        ("200%", 2.00f64),
-    ];
-    for (label, factor) in scales {
-        let btn = gtk4::Button::with_label(label);
-        btn.add_css_class("hyprdrop-pill");
-        let state_res = state.clone();
-        let canvas_res = canvas.clone();
-        let dim_lbl_res = dim_lbl.clone();
-        btn.connect_clicked(move |_| {
-            let mut s = state_res.borrow_mut();
-            let new_pw = ((s.preview_image.width() as f64) * factor).round().max(16.0) as u32;
-            let new_ph = ((s.preview_image.height() as f64) * factor).round().max(16.0) as u32;
-            s.preview_image = s.preview_image.resize(new_pw, new_ph, image::imageops::FilterType::Lanczos3);
-            s.ops.push(TransformOp::Scale(factor));
-            s.cur_full_w = ((s.cur_full_w as f64) * factor).round().max(16.0) as u32;
-            s.cur_full_h = ((s.cur_full_h as f64) * factor).round().max(16.0) as u32;
-            dim_lbl_res.set_text(&format!("{}×{} px", s.cur_full_w, s.cur_full_h));
-            drop(s);
-            canvas_res.queue_draw();
-        });
-        resize_box.append(&btn);
-    }
-    sidebar.append(&resize_box);
-    sidebar.append(&gtk4::Separator::new(gtk4::Orientation::Horizontal));
-
-    // Auto-Trim Transparent
-    let trim_btn = gtk4::Button::with_label("Auto-Trim Transparent");
+    let trim_btn = gtk4::Button::with_label("Auto-Trim");
     trim_btn.add_css_class("hyprdrop-pill");
+    trim_btn.set_hexpand(true);
     let state_trim = state.clone();
     let canvas_trim = canvas.clone();
     let dim_lbl_trim = dim_lbl.clone();
@@ -287,7 +238,57 @@ pub fn open_quick_edit_modal(
         drop(s);
         canvas_trim.queue_draw();
     });
-    sidebar.append(&trim_btn);
+    t_row.append(&trim_btn);
+
+    controls_box.append(&t_row);
+
+    // Section 2: Quick Scale & Dimensions
+    let resize_header = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
+    let resize_lbl = gtk4::Label::new(Some("QUICK SCALE & RESOLUTION"));
+    resize_lbl.add_css_class("mac-section-header");
+    resize_header.append(&resize_lbl);
+    resize_header.append(&dim_lbl);
+    controls_box.append(&resize_header);
+
+    let resize_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
+    let scales = [
+        ("25%", 0.25f64),
+        ("50%", 0.50f64),
+        ("75%", 0.75f64),
+        ("150%", 1.50f64),
+        ("200%", 2.00f64),
+    ];
+    for (label, factor) in scales {
+        let btn = gtk4::Button::with_label(label);
+        btn.add_css_class("hyprdrop-pill");
+        btn.set_hexpand(true);
+        let state_res = state.clone();
+        let canvas_res = canvas.clone();
+        let dim_lbl_res = dim_lbl.clone();
+        btn.connect_clicked(move |_| {
+            let mut s = state_res.borrow_mut();
+            let new_pw = ((s.preview_image.width() as f64) * factor).round().max(16.0) as u32;
+            let new_ph = ((s.preview_image.height() as f64) * factor).round().max(16.0) as u32;
+            s.preview_image = s.preview_image.resize(new_pw, new_ph, image::imageops::FilterType::Lanczos3);
+            s.ops.push(TransformOp::Scale(factor));
+            s.cur_full_w = ((s.cur_full_w as f64) * factor).round().max(16.0) as u32;
+            s.cur_full_h = ((s.cur_full_h as f64) * factor).round().max(16.0) as u32;
+            dim_lbl_res.set_text(&format!("{}×{} px", s.cur_full_w, s.cur_full_h));
+            drop(s);
+            canvas_res.queue_draw();
+        });
+        resize_box.append(&btn);
+    }
+    controls_box.append(&resize_box);
+
+    // Section 3: Color & Lighting
+    let color_lbl = gtk4::Label::new(Some("COLOR & LIGHTING"));
+    color_lbl.add_css_class("mac-section-header");
+    color_lbl.set_halign(gtk4::Align::Start);
+    controls_box.append(&color_lbl);
+
+    let sliders_box = gtk4::Box::new(gtk4::Orientation::Vertical, 10);
+    sliders_box.add_css_class("mac-card");
 
     // Brightness Slider
     let b_header = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
@@ -299,7 +300,7 @@ pub fn open_quick_edit_modal(
     b_val.set_halign(gtk4::Align::End);
     b_header.append(&b_title);
     b_header.append(&b_val);
-    sidebar.append(&b_header);
+    sliders_box.append(&b_header);
 
     let b_scale = gtk4::Scale::with_range(gtk4::Orientation::Horizontal, -100.0, 100.0, 5.0);
     b_scale.set_value(0.0);
@@ -312,7 +313,7 @@ pub fn open_quick_edit_modal(
         state_b.borrow_mut().brightness = val;
         canvas_b.queue_draw();
     });
-    sidebar.append(&b_scale);
+    sliders_box.append(&b_scale);
 
     // Contrast Slider
     let c_header = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
@@ -324,7 +325,7 @@ pub fn open_quick_edit_modal(
     c_val.set_halign(gtk4::Align::End);
     c_header.append(&c_title);
     c_header.append(&c_val);
-    sidebar.append(&c_header);
+    sliders_box.append(&c_header);
 
     let c_scale = gtk4::Scale::with_range(gtk4::Orientation::Horizontal, -50.0, 50.0, 2.0);
     c_scale.set_value(0.0);
@@ -337,41 +338,49 @@ pub fn open_quick_edit_modal(
         state_c.borrow_mut().contrast = val;
         canvas_c.queue_draw();
     });
-    sidebar.append(&c_scale);
+    sliders_box.append(&c_scale);
 
-    // Reset button
+    controls_box.append(&sliders_box);
+
+    // Section 4: Action Buttons Row
+    let act_row = gtk4::Box::new(gtk4::Orientation::Horizontal, 12);
+    act_row.set_margin_top(8);
+
     let reset_btn = gtk4::Button::with_label("Reset All");
     reset_btn.add_css_class("hyprdrop-secondary");
     let state_reset = state.clone();
     let canvas_reset = canvas.clone();
     let b_scale_reset = b_scale.clone();
     let c_scale_reset = c_scale.clone();
+    let b_val_reset = b_val.clone();
+    let c_val_reset = c_val.clone();
     let dim_lbl_reset = dim_lbl.clone();
     reset_btn.connect_clicked(move |_| {
-        let mut s = state_reset.borrow_mut();
-        s.preview_image = s.initial_preview.clone();
-        s.ops.clear();
-        s.cur_full_w = s.orig_w;
-        s.cur_full_h = s.orig_h;
-        s.brightness = 0;
-        s.contrast = 0.0;
+        let (orig_w, orig_h) = {
+            let mut s = state_reset.borrow_mut();
+            s.preview_image = s.initial_preview.clone();
+            s.ops.clear();
+            s.cur_full_w = s.orig_w;
+            s.cur_full_h = s.orig_h;
+            s.brightness = 0;
+            s.contrast = 0.0;
+            (s.orig_w, s.orig_h)
+        };
         b_scale_reset.set_value(0.0);
         c_scale_reset.set_value(0.0);
-        dim_lbl_reset.set_text(&format!("{}×{} px", s.orig_w, s.orig_h));
-        drop(s);
+        b_val_reset.set_text("0");
+        c_val_reset.set_text("0.0");
+        dim_lbl_reset.set_text(&format!("{}×{} px", orig_w, orig_h));
         canvas_reset.queue_draw();
     });
-    sidebar.append(&reset_btn);
+    act_row.append(&reset_btn);
 
-    let spacer = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
-    spacer.set_vexpand(true);
-    sidebar.append(&spacer);
+    let spacer = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
+    spacer.set_hexpand(true);
+    act_row.append(&spacer);
 
-    // Action buttons
-    let act_row = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
     let cancel_btn = gtk4::Button::with_label("Cancel");
     cancel_btn.add_css_class("hyprdrop-secondary");
-    cancel_btn.set_hexpand(true);
     let win_cancel = window.clone();
     cancel_btn.connect_clicked(move |_| {
         win_cancel.close();
@@ -380,7 +389,6 @@ pub fn open_quick_edit_modal(
 
     let save_btn = gtk4::Button::with_label("Save Edits");
     save_btn.add_css_class("hyprdrop-primary");
-    save_btn.set_hexpand(true);
     let win_save = window.clone();
     let state_save = state.clone();
     let on_success_rc = Rc::new(on_success);
@@ -416,10 +424,16 @@ pub fn open_quick_edit_modal(
         crate::engine::trim_memory();
     });
     act_row.append(&save_btn);
-    sidebar.append(&act_row);
 
-    body_box.append(&sidebar);
-    root_box.append(&body_box);
+    controls_box.append(&act_row);
+
+    // 4. Wrap controls in ScrolledWindow beneath the fixed top preview
+    let scrolled_controls = gtk4::ScrolledWindow::builder()
+        .vexpand(true)
+        .hscrollbar_policy(gtk4::PolicyType::Never)
+        .child(&controls_box)
+        .build();
+    root_box.append(&scrolled_controls);
 
     window.connect_destroy(move |_| {
         crate::engine::trim_memory();
@@ -430,19 +444,68 @@ pub fn open_quick_edit_modal(
     window.present();
 }
 
+fn draw_rounded_rect(cr: &Context, x: f64, y: f64, w: f64, h: f64, r: f64) {
+    cr.new_sub_path();
+    cr.arc(x + w - r, y + r, r, -std::f64::consts::FRAC_PI_2, 0.0);
+    cr.arc(x + w - r, y + h - r, r, 0.0, std::f64::consts::FRAC_PI_2);
+    cr.arc(x + r, y + h - r, r, std::f64::consts::FRAC_PI_2, std::f64::consts::PI);
+    cr.arc(x + r, y + r, r, std::f64::consts::PI, 3.0 * std::f64::consts::FRAC_PI_2);
+    cr.close_path();
+}
+
 fn draw_edit_canvas(cr: &Context, cw: f64, ch: f64, state: &EditState) {
-    cr.set_source_rgb(0.06, 0.06, 0.07);
+    // Fill canvas background
+    cr.set_source_rgb(0.07, 0.07, 0.09);
     let _ = cr.paint();
+
+    // Outer card frame
+    let card_x = 10.0;
+    let card_y = 10.0;
+    let card_w = (cw - 20.0).max(10.0);
+    let card_h = (ch - 20.0).max(10.0);
+
+    draw_rounded_rect(cr, card_x, card_y, card_w, card_h, 16.0);
+    cr.set_source_rgb(0.09, 0.09, 0.12);
+    let _ = cr.fill_preserve();
+    cr.set_source_rgba(1.0, 1.0, 1.0, 0.06);
+    cr.set_line_width(1.0);
+    let _ = cr.stroke();
 
     let adjusted = adjust_brightness_contrast(&state.preview_image, state.brightness, state.contrast);
     let iw = adjusted.width() as f64;
     let ih = adjusted.height() as f64;
 
-    let sx = (cw - 32.0) / iw;
-    let sy = (ch - 32.0) / ih;
+    let sx = (card_w - 32.0) / iw;
+    let sy = (card_h - 32.0) / ih;
     let scale = sx.min(sy).clamp(0.01, 1.0);
-    let vx = (cw - iw * scale) / 2.0;
-    let vy = (ch - ih * scale) / 2.0;
+    let fw = iw * scale;
+    let fh = ih * scale;
+    let vx = card_x + (card_w - fw) / 2.0;
+    let vy = card_y + (card_h - fh) / 2.0;
+
+    // Soft drop shadow behind image
+    draw_rounded_rect(cr, vx + 2.0, vy + 4.0, fw, fh, 6.0);
+    cr.set_source_rgba(0.0, 0.0, 0.0, 0.4);
+    let _ = cr.fill();
+
+    // Checkerboard pattern for transparency behind the image
+    let checker_size = 12.0;
+    cr.save().ok();
+    draw_rounded_rect(cr, vx, vy, fw, fh, 6.0);
+    let _ = cr.clip();
+    let num_x = (fw / checker_size).ceil() as i32;
+    let num_y = (fh / checker_size).ceil() as i32;
+    for ix in 0..num_x {
+        for iy in 0..num_y {
+            if (ix + iy) % 2 == 0 {
+                cr.set_source_rgb(0.13, 0.13, 0.16);
+            } else {
+                cr.set_source_rgb(0.18, 0.18, 0.22);
+            }
+            cr.rectangle(vx + ix as f64 * checker_size, vy + iy as f64 * checker_size, checker_size, checker_size);
+            let _ = cr.fill();
+        }
+    }
 
     let rgba = adjusted.to_rgba8();
     let mut bgra = Vec::with_capacity((iw * ih * 4.0) as usize);
@@ -467,4 +530,11 @@ fn draw_edit_canvas(cr: &Context, cw: f64, ch: f64, state: &EditState) {
         let _ = cr.paint();
         cr.restore().ok();
     }
+    cr.restore().ok();
+
+    // Border around image
+    draw_rounded_rect(cr, vx, vy, fw, fh, 6.0);
+    cr.set_source_rgba(1.0, 1.0, 1.0, 0.12);
+    cr.set_line_width(1.0);
+    let _ = cr.stroke();
 }

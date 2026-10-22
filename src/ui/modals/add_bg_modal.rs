@@ -136,18 +136,22 @@ pub fn open_add_bg_modal(
     style_lbl.set_halign(gtk4::Align::Start);
     controls_box.append(&style_lbl);
 
-    // 16 Curated Swatches Grid (2 rows of 8)
+    // 32 Curated Swatches Grid (4 rows of 8)
     let grid_box = gtk4::Box::new(gtk4::Orientation::Vertical, 8);
-    let row1 = gtk4::Box::new(gtk4::Orientation::Horizontal, 10);
-    let row2 = gtk4::Box::new(gtk4::Orientation::Horizontal, 10);
-    row1.set_halign(gtk4::Align::Start);
-    row2.set_halign(gtk4::Align::Start);
+    let rows: Vec<gtk4::Box> = (0..4)
+        .map(|_| {
+            let r = gtk4::Box::new(gtk4::Orientation::Horizontal, 10);
+            r.set_halign(gtk4::Align::Start);
+            r
+        })
+        .collect();
 
     let presets = StudioBackgroundPreset::ALL_PRESETS;
     let mut swatch_redraw_triggers: Vec<gtk4::DrawingArea> = Vec::new();
 
     for (idx, &preset_val) in presets.iter().enumerate() {
-        let target_row = if idx < 8 { &row1 } else { &row2 };
+        let row_idx = (idx / 8).min(3);
+        let target_row = &rows[row_idx];
 
         let swatch_area = gtk4::DrawingArea::builder()
             .content_width(34)
@@ -184,7 +188,7 @@ pub fn open_add_bg_modal(
         target_row.append(&swatch_area);
     }
 
-    // 16th Swatch: Custom Color Picker / Rainbow Swatch
+    // Custom Color Picker / Rainbow Swatch appended to last row
     let custom_area = gtk4::DrawingArea::builder()
         .content_width(34)
         .content_height(34)
@@ -238,10 +242,13 @@ pub fn open_add_bg_modal(
         );
     });
     custom_area.add_controller(custom_gesture);
-    row2.append(&custom_area);
+    if let Some(last_row) = rows.last() {
+        last_row.append(&custom_area);
+    }
 
-    grid_box.append(&row1);
-    grid_box.append(&row2);
+    for r in &rows {
+        grid_box.append(r);
+    }
     controls_box.append(&grid_box);
 
     // 4. Sliders (Padding, Corners, Shadow)
@@ -397,12 +404,14 @@ pub fn open_add_bg_modal(
     let custom_area_reset = custom_area.clone();
 
     reset_btn.connect_clicked(move |_| {
-        let mut s = state_reset.borrow_mut();
-        s.preset = StudioBackgroundPreset::SunsetOrange;
-        s.padding = 64;
-        s.corner_radius = 28.0;
-        s.shadow_intensity = 0.65;
-        s.aspect_ratio = TargetAspectRatio::Auto;
+        {
+            let mut s = state_reset.borrow_mut();
+            s.preset = StudioBackgroundPreset::SunsetOrange;
+            s.padding = 64;
+            s.corner_radius = 28.0;
+            s.shadow_intensity = 0.65;
+            s.aspect_ratio = TargetAspectRatio::Auto;
+        }
         pad_reset.set_value(64.0);
         cr_reset.set_value(28.0);
         sh_reset.set_value(0.65);
@@ -413,7 +422,6 @@ pub fn open_add_bg_modal(
                 p.remove_css_class("active");
             }
         }
-        drop(s);
         canvas_reset.queue_draw();
         custom_area_reset.queue_draw();
         for sw in &all_swatches_reset {
@@ -453,7 +461,13 @@ pub fn open_add_bg_modal(
     bottom_row.append(&save_btn);
 
     controls_box.append(&bottom_row);
-    root_box.append(&controls_box);
+
+    let scrolled_controls = gtk4::ScrolledWindow::builder()
+        .vexpand(true)
+        .hscrollbar_policy(gtk4::PolicyType::Never)
+        .child(&controls_box)
+        .build();
+    root_box.append(&scrolled_controls);
 
     window.connect_destroy(move |_| {
         crate::engine::trim_memory();
