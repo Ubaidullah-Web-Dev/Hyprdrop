@@ -141,12 +141,12 @@ fn test_tray_icon_pixmap_generation() {
     assert_eq!(data[center_idx + 2], 22); // G
     assert_eq!(data[center_idx + 3], 24); // B
 
-    // Outer pixel at (25, 15) should be Warm Orange #FF5722 (distance ~9.5 from center 15.5)
+    // Outer pixel at (25, 15) should be Modern Electric Blue #0A84FF (distance ~9.5 from center 15.5)
     let ring_idx = (15 * 32 + 25) * 4;
     assert_eq!(data[ring_idx], 255); // Alpha
-    assert_eq!(data[ring_idx + 1], 255); // R
-    assert_eq!(data[ring_idx + 2], 87); // G
-    assert_eq!(data[ring_idx + 3], 34); // B
+    assert_eq!(data[ring_idx + 1], 10); // R
+    assert_eq!(data[ring_idx + 2], 132); // G
+    assert_eq!(data[ring_idx + 3], 255); // B
 
     // Corner pixel at (0, 0) should be transparent
     assert_eq!(data[0], 0); // Alpha 0

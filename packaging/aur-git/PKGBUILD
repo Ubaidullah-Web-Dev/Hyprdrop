@@ -1,0 +1,62 @@
+# Maintainer: Ubaid <ubaidullah.web.dev@gmail.com>
+pkgname=hyprdrop-git
+pkgver=0.1.0.r12.g9ae1be2
+pkgrel=1
+pkgdesc="Radial drag-and-drop file converter, quick-action studio, and drop-shelf utility for Hyprland (git VCS release)"
+arch=('x86_64')
+url="https://github.com/Ubaidullah-Web-Dev/Hyprdrop"
+license=('GPL-3.0-or-later')
+depends=(
+    'gtk4'
+    'libadwaita'
+    'gtk4-layer-shell'
+    'cairo'
+    'ffmpeg'
+    'at-spi2-core'
+)
+optdepends=(
+    'poppler: for high-DPI PDF page rasterization (pdftoppm)'
+    'tesseract: for OCR text extraction from images'
+    'wl-clipboard: for direct Wayland clipboard copy support'
+    'pandoc: for document format conversion (Markdown/DOCX)'
+    'hyprland: for native compositor overlay blur and cursor anchoring'
+)
+makedepends=('cargo' 'git' 'pkgconf' 'gcc')
+provides=('hyprdrop')
+conflicts=('hyprdrop' 'hyprdrop-bin')
+source=("git+https://github.com/Ubaidullah-Web-Dev/Hyprdrop.git")
+sha256sums=('SKIP')
+
+pkgver() {
+    cd "${srcdir}/Hyprdrop" 2>/dev/null || cd "${srcdir}/${pkgname}" 2>/dev/null || cd "$startdir/../.."
+    git describe --long --tags --abbrev=7 2>/dev/null | sed 's/^v//;s/\([^-]*-g\)/r\1/;s/-/./g' || \
+    printf "0.1.0.r%s.g%s" "$(git rev-list --count HEAD)" "$(git rev-parse --short=7 HEAD)"
+}
+
+build() {
+    cd "${srcdir}/Hyprdrop" 2>/dev/null || cd "${srcdir}/${pkgname}" 2>/dev/null || cd "$startdir/../.."
+    cargo build --release --locked
+}
+
+check() {
+    cd "${srcdir}/Hyprdrop" 2>/dev/null || cd "${srcdir}/${pkgname}" 2>/dev/null || cd "$startdir/../.."
+    cargo test --release --locked
+}
+
+package() {
+    cd "${srcdir}/Hyprdrop" 2>/dev/null || cd "${srcdir}/${pkgname}" 2>/dev/null || cd "$startdir/../.."
+    install -Dm755 "target/release/hyprdrop" "${pkgdir}/usr/bin/hyprdrop"
+    install -Dm755 "target/release/hyprdrop-detect-selection" "${pkgdir}/usr/bin/hyprdrop-detect-selection"
+    install -Dm644 "assets/hyprdrop.desktop" "${pkgdir}/usr/share/applications/hyprdrop.desktop"
+    install -Dm644 "assets/hyprdrop.svg" "${pkgdir}/usr/share/icons/hicolor/scalable/apps/hyprdrop.svg"
+
+    for s in 16 24 32 48 64 128 256 512; do
+        if [ -f "assets/icons/hicolor/${s}x${s}/apps/hyprdrop.png" ]; then
+            install -Dm644 "assets/icons/hicolor/${s}x${s}/apps/hyprdrop.png" "${pkgdir}/usr/share/icons/hicolor/${s}x${s}/apps/hyprdrop.png"
+        fi
+    done
+
+    install -Dm644 "assets/hyprdrop.service" "${pkgdir}/usr/lib/systemd/user/hyprdrop.service"
+    install -Dm644 "README.md" "${pkgdir}/usr/share/doc/hyprdrop/README.md"
+    install -Dm644 "LICENSE" "${pkgdir}/usr/share/licenses/hyprdrop/LICENSE"
+}

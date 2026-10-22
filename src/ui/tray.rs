@@ -522,11 +522,11 @@ pub fn generate_icon_pixmap(size: i32) -> (i32, i32, Vec<u8>) {
                 data.push(22);  // G
                 data.push(24);  // B
             } else if (7.5..=13.5).contains(&r) {
-                // International Warm Orange #FF5722
+                // Modern Electric Blue #0A84FF
                 data.push(255); // A
-                data.push(255); // R
-                data.push(87);  // G
-                data.push(34);  // B
+                data.push(10);  // R
+                data.push(132); // G
+                data.push(255); // B
             } else if r > 5.5 && r < 7.5 {
                 // Transparent inner ring gap
                 data.push(0);
@@ -537,9 +537,9 @@ pub fn generate_icon_pixmap(size: i32) -> (i32, i32, Vec<u8>) {
                 // Smooth anti-aliased outer edge
                 let alpha = ((14.5 - r) * 255.0).clamp(0.0, 255.0) as u8;
                 data.push(alpha);
+                data.push(10);
+                data.push(132);
                 data.push(255);
-                data.push(87);
-                data.push(34);
             } else {
                 // Transparent background
                 data.push(0);

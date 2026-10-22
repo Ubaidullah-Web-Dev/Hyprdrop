@@ -1,0 +1,276 @@
+name: Build, Release & AUR Deploy
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Test & Lint
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install System Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libgtk-4-dev \
+            libadwaita-1-dev \
+            libcairo2-dev \
+            libatspi-dev \
+            libglib2.0-dev \
+            libwayland-dev \
+            libgirepository1.0-dev \
+            librsvg2-bin \
+            libgtk4-layer-shell-dev \
+            pkg-config \
+            gcc
+
+      - name: Setup Rust Toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Run Tests
+        run: cargo test --verbose
+
+  release-binaries:
+    name: Build & Release Tarball
+    needs: test
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    outputs:
+      tar_name: ${{ steps.package.outputs.tar_name }}
+      sha256: ${{ steps.package.outputs.sha256 }}
+      version: ${{ steps.package.outputs.version }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install System Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libgtk-4-dev \
+            libadwaita-1-dev \
+            libcairo2-dev \
+            libatspi-dev \
+            libglib2.0-dev \
+            libwayland-dev \
+            librsvg2-bin \
+            libgtk4-layer-shell-dev \
+            pkg-config \
+            gcc
+
+      - name: Setup Rust Toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build and Package Release
+        id: package
+        run: |
+          chmod +x packaging/scripts/create-release-tarball.sh
+          ./packaging/scripts/create-release-tarball.sh
+
+          VERSION="$(grep -m1 '^version' Cargo.toml | cut -d '"' -f 2)"
+          TAR_NAME="hyprdrop-v${VERSION}-x86_64-unknown-linux-gnu.tar.gz"
+          SHA256="$(cat dist/${TAR_NAME}.sha256 | awk '{print $1}')"
+
+          echo "tar_name=${TAR_NAME}" >> "$GITHUB_OUTPUT"
+          echo "sha256=${SHA256}" >> "$GITHUB_OUTPUT"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/${{ steps.package.outputs.tar_name }}
+            dist/${{ steps.package.outputs.tar_name }}.sha256
+          name: Hyprdrop v${{ steps.package.outputs.version }}
+          generate_release_notes: true
+          draft: false
+          prerelease: false
+
+  sync-aur-git:
+    name: Sync hyprdrop-git to AUR
+    needs: test
+    if: (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')) && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:latest
+    steps:
+      - name: Install Arch Packages
+        run: |
+          pacman -Syu --noconfirm git openssh base-devel sudo
+
+      - name: Setup Non-Root User for Makepkg
+        run: |
+          useradd -m builder
+          echo "builder ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check AUR SSH Key Secret
+        id: check-secret
+        env:
+          AUR_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+        run: |
+          if [ -z "$AUR_KEY" ]; then
+            echo "::warning::AUR_SSH_PRIVATE_KEY secret is not configured in this repository. Skipping automatic AUR sync."
+            echo "has_key=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_key=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Configure SSH for AUR
+        if: steps.check-secret.outputs.has_key == 'true'
+        env:
+          AUR_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+        run: |
+          mkdir -p /home/builder/.ssh
+          echo "$AUR_KEY" > /home/builder/.ssh/aur_key
+          chmod 600 /home/builder/.ssh/aur_key
+          ssh-keyscan -v -t ed25519,rsa aur.archlinux.org >> /home/builder/.ssh/known_hosts
+
+          cat << 'EOF' > /home/builder/.ssh/config
+          Host aur.archlinux.org
+            User aur
+            IdentityFile /home/builder/.ssh/aur_key
+            StrictHostKeyChecking accept-new
+          EOF
+          chown -R builder:builder /home/builder/.ssh
+
+      - name: Push to hyprdrop-git AUR Repository
+        if: steps.check-secret.outputs.has_key == 'true'
+        run: |
+          su builder -c '
+            set -e
+            git config --global user.name "Ubaid"
+            git config --global user.email "ubaidullah.web.dev@gmail.com"
+
+            WORK_DIR="$(mktemp -d)"
+            cd "$WORK_DIR"
+
+            if ! git clone "ssh://aur@aur.archlinux.org/hyprdrop-git.git" .; then
+              git init
+              git remote add origin "ssh://aur@aur.archlinux.org/hyprdrop-git.git"
+            fi
+
+            cp "'"$PWD"'/packaging/aur-git/PKGBUILD" .
+            makepkg --printsrcinfo > .SRCINFO
+
+            git add PKGBUILD .SRCINFO
+            if ! git diff-index --quiet HEAD 2>/dev/null; then
+              git commit -m "chore(release): bump hyprdrop-git to latest git commit"
+              git push origin master || git push origin main
+              echo "Successfully pushed hyprdrop-git to AUR!"
+            else
+              echo "hyprdrop-git is already up to date on AUR."
+            fi
+          '
+
+  sync-aur-bin:
+    name: Sync hyprdrop-bin to AUR
+    needs: release-binaries
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:latest
+    steps:
+      - name: Install Arch Packages
+        run: |
+          pacman -Syu --noconfirm git openssh base-devel sudo
+
+      - name: Setup Non-Root User for Makepkg
+        run: |
+          useradd -m builder
+          echo "builder ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check AUR SSH Key Secret
+        id: check-secret
+        env:
+          AUR_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+        run: |
+          if [ -z "$AUR_KEY" ]; then
+            echo "::warning::AUR_SSH_PRIVATE_KEY secret is not configured in this repository. Skipping automatic AUR sync."
+            echo "has_key=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_key=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Configure SSH for AUR
+        if: steps.check-secret.outputs.has_key == 'true'
+        env:
+          AUR_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+        run: |
+          mkdir -p /home/builder/.ssh
+          echo "$AUR_KEY" > /home/builder/.ssh/aur_key
+          chmod 600 /home/builder/.ssh/aur_key
+          ssh-keyscan -v -t ed25519,rsa aur.archlinux.org >> /home/builder/.ssh/known_hosts
+
+          cat << 'EOF' > /home/builder/.ssh/config
+          Host aur.archlinux.org
+            User aur
+            IdentityFile /home/builder/.ssh/aur_key
+            StrictHostKeyChecking accept-new
+          EOF
+          chown -R builder:builder /home/builder/.ssh
+
+      - name: Push to hyprdrop-bin AUR Repository
+        if: steps.check-secret.outputs.has_key == 'true'
+        env:
+          VERSION: ${{ needs.release-binaries.outputs.version }}
+          SHA256: ${{ needs.release-binaries.outputs.sha256 }}
+        run: |
+          su builder -c '
+            set -e
+            git config --global user.name "Ubaid"
+            git config --global user.email "ubaidullah.web.dev@gmail.com"
+
+            WORK_DIR="$(mktemp -d)"
+            cd "$WORK_DIR"
+
+            if ! git clone "ssh://aur@aur.archlinux.org/hyprdrop-bin.git" .; then
+              git init
+              git remote add origin "ssh://aur@aur.archlinux.org/hyprdrop-bin.git"
+            fi
+
+            cp "'"$PWD"'/packaging/aur-bin/PKGBUILD" .
+
+            sed -i "s/^pkgver=.*/pkgver='"$VERSION"'/" PKGBUILD
+            sed -i "s/^pkgrel=.*/pkgrel=1/" PKGBUILD
+            sed -i "s/^sha256sums=.*/sha256sums=(\x27'"$SHA256"'\x27)/" PKGBUILD
+
+            makepkg --printsrcinfo > .SRCINFO
+
+            git add PKGBUILD .SRCINFO
+            if ! git diff-index --quiet HEAD 2>/dev/null; then
+              git commit -m "chore(release): bump hyprdrop-bin to '"$VERSION"'"
+              git push origin master || git push origin main
+              echo "Successfully pushed hyprdrop-bin to AUR!"
+            else
+              echo "hyprdrop-bin is already up to date on AUR."
+            fi
+          '

@@ -1,8 +1,12 @@
+<p align="center">
+  <img src="assets/hyprdrop.svg" width="128" height="128" alt="Hyprdrop Icon" />
+</p>
+
 # Hyprdrop (`hyprdrop`)
 
 > **Industrial-grade radial drag-and-drop file converter, quick-action studio editor, and floating drop-shelf utility for Arch Linux and Hyprland (Wayland).**
 
-[![Arch Linux](https://img.shields.io/badge/Arch_Linux-AUR_Package-1793D1?logo=arch-linux&logoColor=white)](https://aur.archlinux.org/packages/hyprdrop)
+[![Arch Linux](https://img.shields.io/badge/Arch_Linux-AUR_Package-1793D1?logo=arch-linux&logoColor=white)](https://aur.archlinux.org/packages/hyprdrop-bin)
 [![Hyprland](https://img.shields.io/badge/Hyprland-Wayland_Layer_Shell-00A4DC?logo=wayland&logoColor=white)](https://hyprland.org)
 [![Rust 2024](https://img.shields.io/badge/Rust-2024_Edition-DEA584?logo=rust&logoColor=white)](https://www.rust-lang.org)
 [![GTK4 + Libadwaita](https://img.shields.io/badge/GTK4-Libadwaita-3584E4?logo=gnome&logoColor=white)](https://gtk.org)
@@ -110,27 +114,36 @@ Alternatively, open `hyprdrop settings` and click **"Configure Hyprland Automati
 
 ### From the AUR (Arch User Repository)
 
+**Precompiled Binary (Recommended — Instant install):**
 ```bash
-yay -S hyprdrop
+yay -S hyprdrop-bin
 # or
-paru -S hyprdrop
+paru -S hyprdrop-bin
 ```
 
-### Manual Build via `makepkg`
-
+**Development Git Version (Compiles latest commit from source):**
 ```bash
-git clone https://github.com/hyprland-community/hyprdrop.git
-cd hyprdrop
-makepkg -si
+yay -S hyprdrop-git
+# or
+paru -S hyprdrop-git
 ```
 
-### Local Build from Source
+### Manual Install via Script
 
 ```bash
-git clone https://github.com/hyprland-community/hyprdrop.git
-cd hyprdrop
-cargo build --release
+git clone https://github.com/Ubaidullah-Web-Dev/Hyprdrop.git
+cd Hyprdrop
 ./install.sh
+```
+
+To install system-wide to `/usr/local/bin`:
+```bash
+sudo ./install.sh --system
+```
+
+To cleanly uninstall:
+```bash
+./install.sh --uninstall
 ```
 
 ---

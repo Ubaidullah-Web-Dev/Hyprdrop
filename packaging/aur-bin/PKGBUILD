@@ -1,0 +1,44 @@
+# Maintainer: Ubaid <ubaidullah.web.dev@gmail.com>
+pkgname=hyprdrop-bin
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="Radial drag-and-drop file converter, quick-action studio, and drop-shelf utility for Hyprland (precompiled binary)"
+arch=('x86_64')
+url="https://github.com/Ubaidullah-Web-Dev/Hyprdrop"
+license=('GPL-3.0-or-later')
+depends=(
+    'gtk4'
+    'libadwaita'
+    'gtk4-layer-shell'
+    'cairo'
+    'ffmpeg'
+    'at-spi2-core'
+)
+optdepends=(
+    'poppler: for high-DPI PDF page rasterization (pdftoppm)'
+    'tesseract: for OCR text extraction from images'
+    'wl-clipboard: for direct Wayland clipboard copy support'
+    'pandoc: for document format conversion (Markdown/DOCX)'
+    'hyprland: for native compositor overlay blur and cursor anchoring'
+)
+provides=('hyprdrop')
+conflicts=('hyprdrop' 'hyprdrop-git')
+source=("${pkgname}-${pkgver}.tar.gz::https://github.com/Ubaidullah-Web-Dev/Hyprdrop/releases/download/v${pkgver}/hyprdrop-v${pkgver}-x86_64-unknown-linux-gnu.tar.gz")
+sha256sums=('d7b9376477cf48bb87cc909f85c4d5d4057a7bc26f7570e2a31532ac4730cb83')
+
+package() {
+    install -Dm755 "${srcdir}/hyprdrop" "${pkgdir}/usr/bin/hyprdrop"
+    install -Dm755 "${srcdir}/hyprdrop-detect-selection" "${pkgdir}/usr/bin/hyprdrop-detect-selection"
+    install -Dm644 "${srcdir}/assets/hyprdrop.desktop" "${pkgdir}/usr/share/applications/hyprdrop.desktop"
+    install -Dm644 "${srcdir}/assets/hyprdrop.svg" "${pkgdir}/usr/share/icons/hicolor/scalable/apps/hyprdrop.svg"
+
+    for s in 16 24 32 48 64 128 256 512; do
+        if [ -f "${srcdir}/assets/icons/hicolor/${s}x${s}/apps/hyprdrop.png" ]; then
+            install -Dm644 "${srcdir}/assets/icons/hicolor/${s}x${s}/apps/hyprdrop.png" "${pkgdir}/usr/share/icons/hicolor/${s}x${s}/apps/hyprdrop.png"
+        fi
+    done
+
+    install -Dm644 "${srcdir}/assets/hyprdrop.service" "${pkgdir}/usr/lib/systemd/user/hyprdrop.service"
+    install -Dm644 "${srcdir}/README.md" "${pkgdir}/usr/share/doc/hyprdrop/README.md"
+    install -Dm644 "${srcdir}/LICENSE" "${pkgdir}/usr/share/licenses/hyprdrop/LICENSE"
+}

@@ -1,10 +1,10 @@
-# Maintainer: Hyprdrop Contributors <maintainers@hyprland.org>
+# Maintainer: Ubaid <ubaidullah.web.dev@gmail.com>
 pkgname=hyprdrop
 pkgver=0.1.0
 pkgrel=1
-pkgdesc="Radial drag-and-drop file converter, quick-action editor, and drop-shelf utility for Hyprland"
+pkgdesc="Radial drag-and-drop file converter, quick-action studio, and drop-shelf utility for Hyprland"
 arch=('x86_64')
-url="https://github.com/hyprland-community/hyprdrop"
+url="https://github.com/Ubaidullah-Web-Dev/Hyprdrop"
 license=('GPL-3.0-or-later')
 depends=(
     'gtk4'
@@ -21,8 +21,8 @@ optdepends=(
     'pandoc: for document format conversion (Markdown/DOCX)'
     'hyprland: for native compositor overlay blur and cursor anchoring'
 )
-makedepends=('cargo' 'pkgconf')
-source=("$pkgname-$pkgver.tar.gz")
+makedepends=('cargo' 'pkgconf' 'gcc')
+source=("${pkgname}-${pkgver}.tar.gz::https://github.com/Ubaidullah-Web-Dev/Hyprdrop/archive/refs/tags/v${pkgver}.tar.gz")
 sha256sums=('SKIP')
 
 build() {
@@ -38,7 +38,14 @@ package() {
     install -Dm755 "target/release/hyprdrop-detect-selection" "$pkgdir/usr/bin/hyprdrop-detect-selection"
     install -Dm644 "assets/hyprdrop.desktop" "$pkgdir/usr/share/applications/hyprdrop.desktop"
     install -Dm644 "assets/hyprdrop.svg" "$pkgdir/usr/share/icons/hicolor/scalable/apps/hyprdrop.svg"
+
+    for s in 16 24 32 48 64 128 256 512; do
+        if [ -f "assets/icons/hicolor/${s}x${s}/apps/hyprdrop.png" ]; then
+            install -Dm644 "assets/icons/hicolor/${s}x${s}/apps/hyprdrop.png" "$pkgdir/usr/share/icons/hicolor/${s}x${s}/apps/hyprdrop.png"
+        fi
+    done
+
     install -Dm644 "assets/hyprdrop.service" "$pkgdir/usr/lib/systemd/user/hyprdrop.service"
     install -Dm644 "README.md" "$pkgdir/usr/share/doc/$pkgname/README.md"
-    install -Dm644 "DESIGN.md" "$pkgdir/usr/share/doc/$pkgname/DESIGN.md"
+    install -Dm644 "LICENSE" "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
 }

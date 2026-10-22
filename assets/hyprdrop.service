@@ -1,6 +1,6 @@
 [Unit]
 Description=Hyprdrop Background Daemon for Hyprland
-Documentation=https://github.com/hyprland-community/hyprdrop
+Documentation=https://github.com/Ubaidullah-Web-Dev/Hyprdrop
 PartOf=graphical-session.target
 After=graphical-session.target
 
