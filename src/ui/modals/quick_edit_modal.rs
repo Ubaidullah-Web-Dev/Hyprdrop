@@ -47,6 +47,7 @@ pub fn open_quick_edit_modal(
     };
 
     let (init_w, init_h) = (img.width(), img.height());
+    let has_transparency = img.color().has_alpha();
     let max_dim = (init_w.max(init_h) as f64).max(1.0);
     let preview_scale = (720.0 / max_dim).min(1.0);
     let preview_image = if preview_scale < 1.0 {
@@ -75,7 +76,7 @@ pub fn open_quick_edit_modal(
     let window = gtk4::Window::builder()
         .title("Quick Edit Studio — Hyprdrop")
         .default_width(860)
-        .default_height(680)
+        .default_height(580)
         .build();
 
     if let Some(a) = app {
@@ -120,7 +121,7 @@ pub fn open_quick_edit_modal(
     canvas_box.set_margin_start(20);
     canvas_box.set_margin_end(20);
     canvas_box.set_margin_bottom(12);
-    canvas_box.set_size_request(740, 340);
+    canvas_box.set_size_request(-1, 220);
     canvas_box.set_hexpand(true);
 
     let canvas = gtk4::DrawingArea::builder()
@@ -220,6 +221,12 @@ pub fn open_quick_edit_modal(
     let trim_btn = gtk4::Button::with_label("Auto-Trim");
     trim_btn.add_css_class("hyprdrop-pill");
     trim_btn.set_hexpand(true);
+    if !has_transparency {
+        trim_btn.set_sensitive(false);
+        trim_btn.set_tooltip_text(Some("Auto-Trim is only available for images with alpha transparency (PNG/WEBP)"));
+    } else {
+        trim_btn.set_tooltip_text(Some("Auto-Trim transparent borders"));
+    }
     let state_trim = state.clone();
     let canvas_trim = canvas.clone();
     let dim_lbl_trim = dim_lbl.clone();
@@ -459,12 +466,12 @@ fn draw_edit_canvas(cr: &Context, cw: f64, ch: f64, state: &EditState) {
     let _ = cr.paint();
 
     // Outer card frame
-    let card_x = 10.0;
-    let card_y = 10.0;
-    let card_w = (cw - 20.0).max(10.0);
-    let card_h = (ch - 20.0).max(10.0);
+    let card_x = 8.0;
+    let card_y = 6.0;
+    let card_w = (cw - 16.0).max(10.0);
+    let card_h = (ch - 12.0).max(10.0);
 
-    draw_rounded_rect(cr, card_x, card_y, card_w, card_h, 16.0);
+    draw_rounded_rect(cr, card_x, card_y, card_w, card_h, 14.0);
     cr.set_source_rgb(0.09, 0.09, 0.12);
     let _ = cr.fill_preserve();
     cr.set_source_rgba(1.0, 1.0, 1.0, 0.06);
@@ -475,8 +482,8 @@ fn draw_edit_canvas(cr: &Context, cw: f64, ch: f64, state: &EditState) {
     let iw = adjusted.width() as f64;
     let ih = adjusted.height() as f64;
 
-    let sx = (card_w - 32.0) / iw;
-    let sy = (card_h - 32.0) / ih;
+    let sx = (card_w - 24.0) / iw;
+    let sy = (card_h - 20.0) / ih;
     let scale = sx.min(sy).clamp(0.01, 1.0);
     let fw = iw * scale;
     let fh = ih * scale;

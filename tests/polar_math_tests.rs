@@ -1,5 +1,8 @@
 use std::f64::consts::PI;
-use hyprdrop::ui::radial_menu::{HitZone, INNER_RADIUS, OUTER_RADIUS, hit_test};
+use hyprdrop::engine::FileCategory;
+use hyprdrop::ui::radial_menu::{
+    HitZone, INNER_RADIUS, OUTER_RADIUS, RadialMode, get_slice_support_status, hit_test,
+};
 
 #[test]
 fn test_center_hub_hit() {
@@ -138,4 +141,83 @@ fn test_edge_zero_slices() {
         hit_test(190.0, 190.0, 190.0, 190.0, INNER_RADIUS, OUTER_RADIUS, 0),
         HitZone::Outside
     );
+}
+
+#[test]
+fn test_video_quick_actions_grayed_out() {
+    let cat = FileCategory::AudioVideo;
+    let mode = RadialMode::QuickActions;
+
+    // Video should NOT allow image-only studios
+    let (edit_ok, reason_edit) = get_slice_support_status(cat, mode, "EDIT", Some("mp4"));
+    assert!(!edit_ok);
+    assert_eq!(reason_edit, Some("Unavailable for Video"));
+
+    let (crop_ok, reason_crop) = get_slice_support_status(cat, mode, "CROP", Some("mp4"));
+    assert!(!crop_ok);
+    assert_eq!(reason_crop, Some("Unavailable for Video"));
+
+    let (bg_ok, reason_bg) = get_slice_support_status(cat, mode, "ADD BG", Some("mp4"));
+    assert!(!bg_ok);
+    assert_eq!(reason_bg, Some("Unavailable for Video"));
+
+    let (trim_ok, reason_trim) = get_slice_support_status(cat, mode, "AUTO TRIM", Some("mp4"));
+    assert!(!trim_ok);
+    assert_eq!(reason_trim, Some("Unavailable for Video"));
+
+    let (redact_ok, reason_redact) = get_slice_support_status(cat, mode, "REDACT", Some("mp4"));
+    assert!(!redact_ok);
+    assert_eq!(reason_redact, Some("Unavailable for Video"));
+
+    let (ocr_ok, reason_ocr) = get_slice_support_status(cat, mode, "OCR / COPY", Some("mp4"));
+    assert!(!ocr_ok);
+    assert_eq!(reason_ocr, Some("Unavailable for Video"));
+
+    // Video SHOULD allow compress and metadata
+    let (compress_ok, reason_comp) = get_slice_support_status(cat, mode, "COMPRESS", Some("mp4"));
+    assert!(compress_ok);
+    assert!(reason_comp.is_none());
+
+    let (meta_ok, reason_meta) = get_slice_support_status(cat, mode, "METADATA", Some("mp4"));
+    assert!(meta_ok);
+    assert!(reason_meta.is_none());
+}
+
+#[test]
+fn test_image_all_quick_actions_enabled() {
+    let cat = FileCategory::Image;
+    let mode = RadialMode::QuickActions;
+
+    let actions = ["CROP", "ADD BG", "COMPRESS", "REDACT", "AUTO TRIM", "METADATA", "EDIT", "OCR / COPY"];
+    for act in actions {
+        let (ok, reason) = get_slice_support_status(cat, mode, act, Some("png"));
+        assert!(ok, "Expected {} to be enabled for image", act);
+        assert!(reason.is_none());
+    }
+}
+
+#[test]
+fn test_format_conversion_already_in_format() {
+    let cat = FileCategory::Image;
+    let mode = RadialMode::FormatConversion;
+
+    // PNG -> PNG is redundant
+    let (png_ok, reason_png) = get_slice_support_status(cat, mode, "PNG", Some("png"));
+    assert!(!png_ok);
+    assert_eq!(reason_png, Some("Already In Format"));
+
+    // PNG -> JPG is allowed
+    let (jpg_ok, reason_jpg) = get_slice_support_status(cat, mode, "JPG", Some("png"));
+    assert!(jpg_ok);
+    assert!(reason_jpg.is_none());
+
+    // MP4 -> MP4 on video is redundant
+    let (mp4_ok, reason_mp4) = get_slice_support_status(FileCategory::AudioVideo, mode, "MP4", Some("mp4"));
+    assert!(!mp4_ok);
+    assert_eq!(reason_mp4, Some("Already In Format"));
+
+    // MP4 -> WEBM on video is allowed
+    let (webm_ok, reason_webm) = get_slice_support_status(FileCategory::AudioVideo, mode, "WEBM", Some("mp4"));
+    assert!(webm_ok);
+    assert!(reason_webm.is_none());
 }

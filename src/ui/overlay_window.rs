@@ -10,7 +10,7 @@ use crate::config::ConfigManager;
 use crate::engine::compress::compress_file;
 use crate::engine::ocr_clipboard::{copy_image_to_clipboard, ocr_image_and_copy};
 use crate::engine::{
-    execute_conversion_batch, get_conversion_slices, get_quick_action_slices,
+    FileCategory, execute_conversion_batch, get_conversion_slices, get_quick_action_slices,
 };
 use crate::hyprland::layer_shell::configure_fullscreen_layer_shell_overlay;
 use crate::ui::drop_shelf::DropShelf;
@@ -18,7 +18,10 @@ use crate::ui::modals::{
     open_add_bg_modal, open_crop_modal, open_metadata_modal, open_quick_edit_modal,
     open_redact_annotate_modal,
 };
-use crate::ui::radial_menu::{HitZone, INNER_RADIUS, OUTER_RADIUS, RADIAL_SIZE, RadialMenu, RadialMode, hit_test};
+use crate::ui::radial_menu::{
+    HitZone, INNER_RADIUS, OUTER_RADIUS, RADIAL_SIZE, RadialMenu, RadialMode, get_slice_support_status,
+    hit_test,
+};
 
 thread_local! {
     static ACTIVE_OVERLAY: RefCell<Option<gtk4::ApplicationWindow>> = const { RefCell::new(None) };
@@ -127,6 +130,15 @@ impl OverlayWindow {
                 HitZone::Slice(idx) => {
                     if idx < slices.len() {
                         let slice_name = slices[idx];
+                        let ext = s.current_files.first()
+                            .and_then(|p| p.extension())
+                            .and_then(|e| e.to_str());
+                        let (is_enabled, _) = get_slice_support_status(s.file_category, s.mode, slice_name, ext);
+                        if !is_enabled {
+                            drop(s);
+                            return;
+                        }
+
                         let files = s.current_files.clone();
                         let current_mode = s.mode;
                         drop(s);
@@ -205,8 +217,15 @@ impl OverlayWindow {
                 HitZone::Slice(idx) if idx < slices.len() => {
                     let slice_name = slices[idx];
                     let mode = s.mode;
+                    let cat = FileCategory::from_path(&paths[0]);
+                    let ext = paths[0].extension().and_then(|e| e.to_str());
+                    let (is_enabled, _) = get_slice_support_status(cat, mode, slice_name, ext);
                     drop(s);
-                    handle_slice_activation(&win_drop, &app_drop, &paths, slice_name, mode);
+                    if is_enabled {
+                        handle_slice_activation(&win_drop, &app_drop, &paths, slice_name, mode);
+                    } else {
+                        radial_drop.set_files(paths);
+                    }
                     true
                 }
                 _ => {
@@ -256,6 +275,15 @@ impl OverlayWindow {
 
                     if num < slices.len() {
                         let slice_name = slices[num];
+                        let ext = s.current_files.first()
+                            .and_then(|p| p.extension())
+                            .and_then(|e| e.to_str());
+                        let (is_enabled, _) = get_slice_support_status(s.file_category, s.mode, slice_name, ext);
+                        if !is_enabled {
+                            drop(s);
+                            return glib::Propagation::Stop;
+                        }
+
                         let files = s.current_files.clone();
                         let mode = s.mode;
                         drop(s);
@@ -497,6 +525,12 @@ fn handle_slice_activation(
     }
 
     let first_file = &files[0];
+    let cat = FileCategory::from_path(first_file);
+    let ext = first_file.extension().and_then(|e| e.to_str());
+    let (is_enabled, _) = get_slice_support_status(cat, mode, slice_name, ext);
+    if !is_enabled {
+        return;
+    }
 
     match mode {
         RadialMode::FormatConversion => {

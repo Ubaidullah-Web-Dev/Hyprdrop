@@ -62,8 +62,8 @@ pub fn open_add_bg_modal(
 
     let window = gtk4::Window::builder()
         .title("Background Studio — Hyprdrop")
-        .default_width(780)
-        .default_height(860)
+        .default_width(820)
+        .default_height(600)
         .build();
 
     if let Some(a) = app {
@@ -107,8 +107,8 @@ pub fn open_add_bg_modal(
     let canvas_box = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
     canvas_box.set_margin_start(20);
     canvas_box.set_margin_end(20);
-    canvas_box.set_margin_bottom(16);
-    canvas_box.set_size_request(740, 360);
+    canvas_box.set_margin_bottom(12);
+    canvas_box.set_size_request(-1, 230);
     canvas_box.set_hexpand(true);
 
     let canvas = gtk4::DrawingArea::builder()
@@ -136,28 +136,28 @@ pub fn open_add_bg_modal(
     style_lbl.set_halign(gtk4::Align::Start);
     controls_box.append(&style_lbl);
 
-    // 32 Curated Swatches Grid (4 rows of 8)
-    let grid_box = gtk4::Box::new(gtk4::Orientation::Vertical, 8);
-    let rows: Vec<gtk4::Box> = (0..4)
-        .map(|_| {
-            let r = gtk4::Box::new(gtk4::Orientation::Horizontal, 10);
-            r.set_halign(gtk4::Align::Start);
-            r
-        })
-        .collect();
+    // 33 Swatches Grid (3 rows of 11 columns, fully spanning the width)
+    let swatch_grid = gtk4::Grid::builder()
+        .column_homogeneous(true)
+        .row_homogeneous(true)
+        .column_spacing(8)
+        .row_spacing(8)
+        .hexpand(true)
+        .build();
 
     let presets = StudioBackgroundPreset::ALL_PRESETS;
     let mut swatch_redraw_triggers: Vec<gtk4::DrawingArea> = Vec::new();
 
     for (idx, &preset_val) in presets.iter().enumerate() {
-        let row_idx = (idx / 8).min(3);
-        let target_row = &rows[row_idx];
+        let col = (idx % 11) as i32;
+        let row = (idx / 11) as i32;
 
         let swatch_area = gtk4::DrawingArea::builder()
-            .content_width(34)
-            .content_height(34)
+            .height_request(34)
+            .hexpand(true)
             .focusable(true)
             .build();
+        swatch_area.set_tooltip_text(Some(preset_val.name()));
 
         let state_swatch = state.clone();
         let swatch_preset = preset_val;
@@ -185,15 +185,16 @@ pub fn open_add_bg_modal(
         swatch_area.add_controller(click);
 
         swatch_redraw_triggers.push(swatch_area.clone());
-        target_row.append(&swatch_area);
+        swatch_grid.attach(&swatch_area, col, row, 1, 1);
     }
 
-    // Custom Color Picker / Rainbow Swatch appended to last row
+    // Custom Color Picker / Rainbow Swatch attached at column 10, row 2 (33rd item)
     let custom_area = gtk4::DrawingArea::builder()
-        .content_width(34)
-        .content_height(34)
+        .height_request(34)
+        .hexpand(true)
         .focusable(true)
         .build();
+    custom_area.set_tooltip_text(Some("Custom Color Picker"));
 
     let state_custom_draw = state.clone();
     custom_area.set_draw_func(move |_, cr, w, h| {
@@ -242,14 +243,9 @@ pub fn open_add_bg_modal(
         );
     });
     custom_area.add_controller(custom_gesture);
-    if let Some(last_row) = rows.last() {
-        last_row.append(&custom_area);
-    }
+    swatch_grid.attach(&custom_area, 10, 2, 1, 1);
 
-    for r in &rows {
-        grid_box.append(r);
-    }
-    controls_box.append(&grid_box);
+    controls_box.append(&swatch_grid);
 
     // 4. Sliders (Padding, Corners, Shadow)
     let sliders_card = gtk4::Box::new(gtk4::Orientation::Vertical, 10);
@@ -556,12 +552,12 @@ fn draw_preview_backdrop(cr: &Context, canvas_w: f64, canvas_h: f64, state: &Add
     let _ = cr.paint();
 
     // Draw outer preview card frame with rounded corners
-    let card_x = 10.0;
-    let card_y = 10.0;
-    let card_w = canvas_w - 20.0;
-    let card_h = canvas_h - 20.0;
+    let card_x = 8.0;
+    let card_y = 6.0;
+    let card_w = (canvas_w - 16.0).max(10.0);
+    let card_h = (canvas_h - 12.0).max(10.0);
 
-    draw_rounded_rect(cr, card_x, card_y, card_w, card_h, 18.0);
+    draw_rounded_rect(cr, card_x, card_y, card_w, card_h, 14.0);
     cr.set_source_rgb(0.09, 0.09, 0.11);
     let _ = cr.fill_preserve();
     cr.set_source_rgba(1.0, 1.0, 1.0, 0.06);
@@ -586,8 +582,8 @@ fn draw_preview_backdrop(cr: &Context, canvas_w: f64, canvas_h: f64, state: &Add
     let rw = rendered.width() as f64;
     let rh = rendered.height() as f64;
 
-    let scale_x = (card_w - 32.0) / rw;
-    let scale_y = (card_h - 32.0) / rh;
+    let scale_x = (card_w - 24.0) / rw;
+    let scale_y = (card_h - 20.0) / rh;
     let fit_scale = scale_x.min(scale_y).clamp(0.01, 1.0);
 
     let final_w = rw * fit_scale;

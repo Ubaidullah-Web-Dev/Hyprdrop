@@ -24,6 +24,73 @@ pub enum HitZone {
     Outside,
 }
 
+/// Determines if a radial slice is supported for the current file category & extension.
+/// Returns (is_enabled, disabled_reason).
+pub fn get_slice_support_status(
+    category: FileCategory,
+    mode: RadialMode,
+    slice_label: &str,
+    current_file_ext: Option<&str>,
+) -> (bool, Option<&'static str>) {
+    match mode {
+        RadialMode::FormatConversion => {
+            if let Some(ext) = current_file_ext {
+                let norm_ext = ext.to_uppercase();
+                let norm_slice = slice_label.to_uppercase();
+                if norm_ext == norm_slice
+                    || (norm_ext == "JPEG" && norm_slice == "JPG")
+                    || (norm_ext == "JPG" && norm_slice == "JPEG")
+                    || (norm_ext == "TIFF" && norm_slice == "TIF")
+                {
+                    return (false, Some("Already In Format"));
+                }
+            }
+            (true, None)
+        }
+        RadialMode::QuickActions => {
+            match slice_label {
+                "CROP" => match category {
+                    FileCategory::Image => (true, None),
+                    FileCategory::AudioVideo => (false, Some("Unavailable for Video")),
+                    _ => (false, Some("Images only")),
+                },
+                "ADD BG" => match category {
+                    FileCategory::Image => (true, None),
+                    FileCategory::AudioVideo => (false, Some("Unavailable for Video")),
+                    _ => (false, Some("Images only")),
+                },
+                "COMPRESS" => match category {
+                    FileCategory::Image | FileCategory::AudioVideo | FileCategory::DocumentPdf => (true, None),
+                    FileCategory::Archive => (false, Some("Already Compressed")),
+                    _ => (false, Some("Unsupported")),
+                },
+                "REDACT" => match category {
+                    FileCategory::Image => (true, None),
+                    FileCategory::AudioVideo => (false, Some("Unavailable for Video")),
+                    _ => (false, Some("Images only")),
+                },
+                "AUTO TRIM" => match category {
+                    FileCategory::Image => (true, None),
+                    FileCategory::AudioVideo => (false, Some("Unavailable for Video")),
+                    _ => (false, Some("Images only")),
+                },
+                "METADATA" => (true, None),
+                "EDIT" => match category {
+                    FileCategory::Image => (true, None),
+                    FileCategory::AudioVideo => (false, Some("Unavailable for Video")),
+                    _ => (false, Some("Images only")),
+                },
+                "OCR / COPY" => match category {
+                    FileCategory::Image | FileCategory::DocumentPdf => (true, None),
+                    FileCategory::AudioVideo => (false, Some("Unavailable for Video")),
+                    _ => (false, Some("Images/Docs only")),
+                },
+                _ => (true, None),
+            }
+        }
+    }
+}
+
 /// Pure polar coordinate hit test calculation.
 /// Given coordinate `(x, y)` relative to widget top-left,
 /// computes whether the point hits center hub, a slice `0..slice_count`, or outside.
@@ -214,8 +281,14 @@ impl RadialMenu {
         let slice_angle = (2.0 * PI) / (slice_count as f64);
         let gap_angle = 0.055; // Crisp gap between modern curved sectors
 
+        let ext = state.current_file()
+            .and_then(|p| p.extension())
+            .and_then(|e| e.to_str());
+
         // Render Slices (Modern macOS Island Sectors with Rounded Corners & Pop-Out Hover)
         for (i, &slice_label) in slices.iter().enumerate() {
+            let (is_enabled, _) = get_slice_support_status(state.file_category, state.mode, slice_label, ext);
+
             let start_angle = -PI / 2.0 + (i as f64) * slice_angle;
             let end_angle = start_angle + slice_angle;
 
@@ -226,8 +299,8 @@ impl RadialMenu {
 
             let mid_angle = start_angle + slice_angle / 2.0;
 
-            // When hovered: pop-out displacement outward along radial angle + expansion
-            let (pop_dx, pop_dy, r_in, r_out) = if is_hovered {
+            // When hovered and enabled: pop-out displacement outward along radial angle + expansion
+            let (pop_dx, pop_dy, r_in, r_out) = if is_hovered && is_enabled {
                 let pop_dist = 8.0;
                 (
                     pop_dist * mid_angle.cos(),
@@ -248,7 +321,22 @@ impl RadialMenu {
             // Draw rounded annular sector
             Self::draw_rounded_sector(cr, sector_cx, sector_cy, r_in, r_out, a_start, a_end, 7.0);
 
-            if is_hovered {
+            if !is_enabled {
+                // Disabled / Greyed-out Slice
+                if is_hovered {
+                    cr.set_source_rgba(0.12, 0.12, 0.15, 0.35);
+                    let _ = cr.fill_preserve();
+                    cr.set_source_rgba(0.80, 0.45, 0.15, 0.35);
+                    cr.set_line_width(1.0);
+                    let _ = cr.stroke();
+                } else {
+                    cr.set_source_rgba(0.08, 0.08, 0.10, 0.25);
+                    let _ = cr.fill_preserve();
+                    cr.set_source_rgba(1.0, 1.0, 1.0, 0.04);
+                    cr.set_line_width(0.8);
+                    let _ = cr.stroke();
+                }
+            } else if is_hovered {
                 // macOS Electric Blue with subtle gradient / glow
                 cr.set_source_rgba(0.04, 0.52, 1.0, 0.96); // #0A84FF
                 let _ = cr.fill_preserve();
@@ -274,7 +362,9 @@ impl RadialMenu {
             let font_size = if slice_label.len() > 7 { 10.5 } else { 12.0 };
             cr.set_font_size(font_size);
 
-            if is_hovered {
+            if !is_enabled {
+                cr.set_source_rgba(0.42, 0.44, 0.50, 0.35); // Greyed out text
+            } else if is_hovered {
                 cr.set_source_rgb(1.0, 1.0, 1.0);
             } else {
                 cr.set_source_rgb(0.92, 0.92, 0.96);
@@ -317,37 +407,71 @@ impl RadialMenu {
         // Center Hub Typography
         match state.hovered_zone {
             HitZone::Slice(idx) if idx < slices.len() => {
-                // Display hovered format or action in bright macOS Electric Blue
-                cr.select_font_face("Sans", FontSlant::Normal, FontWeight::Bold);
                 let hover_text = slices[idx];
-                let fsize = if hover_text.len() > 8 { 12.0 } else { 14.0 };
-                cr.set_font_size(fsize);
-                cr.set_source_rgb(0.18, 0.60, 1.0); // Electric Blue text
+                let (is_enabled, disabled_reason) = get_slice_support_status(state.file_category, state.mode, hover_text, ext);
 
-                if let Ok(ext) = cr.text_extents(hover_text) {
-                    cr.new_sub_path();
-                    cr.move_to(
-                        cx - ext.width() / 2.0 - ext.x_bearing(),
-                        cy - ext.height() / 2.0 - ext.y_bearing() - 4.0,
-                    );
-                    let _ = cr.show_text(hover_text);
-                }
+                if is_enabled {
+                    // Display hovered format or action in bright macOS Electric Blue
+                    cr.select_font_face("Sans", FontSlant::Normal, FontWeight::Bold);
+                    let fsize = if hover_text.len() > 8 { 12.0 } else { 14.0 };
+                    cr.set_font_size(fsize);
+                    cr.set_source_rgb(0.18, 0.60, 1.0); // Electric Blue text
 
-                // Subtitle: Action hint
-                cr.select_font_face("Monospace", FontSlant::Normal, FontWeight::Normal);
-                cr.set_font_size(9.0);
-                cr.set_source_rgb(0.60, 0.60, 0.66);
-                let sub = match state.mode {
-                    RadialMode::FormatConversion => "CONVERT",
-                    RadialMode::QuickActions => "ACTION",
-                };
-                if let Ok(ext) = cr.text_extents(sub) {
-                    cr.new_sub_path();
-                    cr.move_to(
-                        cx - ext.width() / 2.0 - ext.x_bearing(),
-                        cy + 14.0 - ext.y_bearing(),
-                    );
-                    let _ = cr.show_text(sub);
+                    if let Ok(ext) = cr.text_extents(hover_text) {
+                        cr.new_sub_path();
+                        cr.move_to(
+                            cx - ext.width() / 2.0 - ext.x_bearing(),
+                            cy - ext.height() / 2.0 - ext.y_bearing() - 4.0,
+                        );
+                        let _ = cr.show_text(hover_text);
+                    }
+
+                    // Subtitle: Action hint
+                    cr.select_font_face("Monospace", FontSlant::Normal, FontWeight::Normal);
+                    cr.set_font_size(9.0);
+                    cr.set_source_rgb(0.60, 0.60, 0.66);
+                    let sub = match state.mode {
+                        RadialMode::FormatConversion => "CONVERT",
+                        RadialMode::QuickActions => "ACTION",
+                    };
+                    if let Ok(ext) = cr.text_extents(sub) {
+                        cr.new_sub_path();
+                        cr.move_to(
+                            cx - ext.width() / 2.0 - ext.x_bearing(),
+                            cy + 14.0 - ext.y_bearing(),
+                        );
+                        let _ = cr.show_text(sub);
+                    }
+                } else {
+                    // Disabled slice hovered!
+                    cr.select_font_face("Sans", FontSlant::Normal, FontWeight::Bold);
+                    let fsize = if hover_text.len() > 8 { 11.5 } else { 13.5 };
+                    cr.set_font_size(fsize);
+                    cr.set_source_rgba(0.50, 0.52, 0.58, 0.75); // Muted gray text
+
+                    if let Ok(ext) = cr.text_extents(hover_text) {
+                        cr.new_sub_path();
+                        cr.move_to(
+                            cx - ext.width() / 2.0 - ext.x_bearing(),
+                            cy - ext.height() / 2.0 - ext.y_bearing() - 5.0,
+                        );
+                        let _ = cr.show_text(hover_text);
+                    }
+
+                    // Subtitle: Disabled reason in clear amber/orange
+                    let reason_str = disabled_reason.unwrap_or("UNAVAILABLE");
+                    cr.select_font_face("Monospace", FontSlant::Normal, FontWeight::Bold);
+                    let sub_size = if reason_str.len() > 14 { 7.5 } else { 8.5 };
+                    cr.set_font_size(sub_size);
+                    cr.set_source_rgba(0.96, 0.60, 0.20, 0.95);
+                    if let Ok(ext) = cr.text_extents(reason_str) {
+                        cr.new_sub_path();
+                        cr.move_to(
+                            cx - ext.width() / 2.0 - ext.x_bearing(),
+                            cy + 13.0 - ext.y_bearing(),
+                        );
+                        let _ = cr.show_text(reason_str);
+                    }
                 }
             }
             _ => {
