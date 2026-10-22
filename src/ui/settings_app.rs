@@ -239,6 +239,7 @@ impl SettingsApp {
         stack.add_named(&health_tab, Some("health"));
         stack.add_named(&prefs_tab, Some("preferences"));
         stack.add_named(&hyprland_tab, Some("hyprland"));
+        stack.set_visible_child_name("activity");
 
         main_col.append(&stack);
         root_box.append(&main_col);
