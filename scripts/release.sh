@@ -16,13 +16,35 @@ cd "${REPO_DIR}"
 
 CURRENT_VER=$(grep -m1 '^version = ' Cargo.toml | cut -d'"' -f2)
 
-if [ $# -lt 1 ]; then
-    echo "Usage: $0 <version|patch|minor|major>"
+# Parse arguments
+TARGET=""
+CUSTOM_MSG=""
+CUSTOM_NOTES=""
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -m|--message)
+            CUSTOM_MSG="$2"
+            shift 2
+            ;;
+        -n|--notes)
+            CUSTOM_NOTES="$2"
+            shift 2
+            ;;
+        *)
+            if [ -z "$TARGET" ]; then
+                TARGET="$1"
+            fi
+            shift
+            ;;
+    esac
+done
+
+if [ -z "$TARGET" ]; then
+    echo "Usage: $0 <version|patch|minor|major> [-m \"commit message\"] [-n \"release notes\"]"
     echo "Current version: ${CURRENT_VER}"
     exit 1
 fi
-
-TARGET="$1"
 
 # Parse SemVer
 IFS='.' read -r MAJOR MINOR PATCH <<< "${CURRENT_VER}"
@@ -141,9 +163,42 @@ if [ -d "${HOME}/.local/bin" ]; then
 fi
 
 # 10. Commit & Tag Git
+if [ -z "${CUSTOM_MSG}" ]; then
+    if [ -t 0 ] || [ -c /dev/tty ]; then
+        read -r -p "Enter commit message [default: chore(release): bump version to v${NEW_VER}]: " USER_MSG < /dev/tty || true
+        CUSTOM_MSG="${USER_MSG:-chore(release): bump version to v${NEW_VER}}"
+    else
+        CUSTOM_MSG="chore(release): bump version to v${NEW_VER}"
+    fi
+fi
+
+if [ -z "${CUSTOM_NOTES}" ]; then
+    PREV_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+    if [ -n "${PREV_TAG}" ]; then
+        CHANGELOG=$(git log "${PREV_TAG}..HEAD" --oneline --no-merges 2>/dev/null || true)
+    else
+        CHANGELOG=$(git log -n 5 --oneline --no-merges 2>/dev/null || true)
+    fi
+
+    if [ -t 0 ] || [ -c /dev/tty ]; then
+        echo ""
+        echo "Recent commits since last release:"
+        echo "${CHANGELOG}"
+        echo ""
+        read -r -p "Enter release notes summary (or press Enter to use recent commits): " USER_NOTES < /dev/tty || true
+        if [ -n "${USER_NOTES}" ]; then
+            CUSTOM_NOTES="${USER_NOTES}"
+        else
+            CUSTOM_NOTES="${CHANGELOG}"
+        fi
+    else
+        CUSTOM_NOTES="${CHANGELOG}"
+    fi
+fi
+
 echo "==> Committing version bump and tagging v${NEW_VER}..."
 git add Cargo.toml Cargo.lock PKGBUILD .SRCINFO packaging/ install.sh README.md src/ scripts/
-git commit -m "chore(release): bump version to v${NEW_VER}" || echo "    (Nothing new to commit)"
+git commit -m "${CUSTOM_MSG}" || echo "    (Nothing new to commit)"
 git tag -f "v${NEW_VER}"
 
 echo "==> Pushing commits and tag to remote origin..."
@@ -163,12 +218,16 @@ if [ -n "${TOKEN}" ]; then
     RELEASE_DATA=$(curl -s -H "Authorization: token ${TOKEN}" "https://api.github.com/repos/Ubaidullah-Web-Dev/Hyprdrop/releases/tags/v${NEW_VER}" || true)
     RELEASE_ID=$(echo "${RELEASE_DATA}" | jq -r '.id // empty' 2>/dev/null || true)
 
+    RELEASE_BODY="### Hyprdrop v${NEW_VER} Release
+
+${CUSTOM_NOTES}"
+
     if [ -z "${RELEASE_ID}" ]; then
         echo "    Creating new release v${NEW_VER} on GitHub..."
         CREATE_PAYLOAD=$(jq -n \
             --arg tag "v${NEW_VER}" \
             --arg name "Hyprdrop v${NEW_VER} — Native Wayland Radial File Studio" \
-            --arg body "### Hyprdrop v${NEW_VER} Release"$'\n\n'"- Comprehensive Archive Studio with full .zip, .tar.gz, .tar.zst support"$'\n'"- Interactive fallback file selector dialog"$'\n'"- Dynamic version tracking and automated live updates"$'\n'"- Daemon auto-restart on install/update" \
+            --arg body "${RELEASE_BODY}" \
             '{tag_name: $tag, name: $name, body: $body, draft: false, prerelease: false}')
         RELEASE_DATA=$(curl -s -X POST -H "Authorization: token ${TOKEN}" \
             -H "Content-Type: application/json" \
