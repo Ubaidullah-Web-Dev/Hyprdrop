@@ -6,6 +6,7 @@ pub mod metadata;
 pub mod naming;
 pub mod ocr_clipboard;
 pub mod pdf_ops;
+pub mod perimeter_math;
 pub mod redact_annotate;
 
 /// Compacts and returns unused heap memory back to the operating system kernel.

@@ -16,7 +16,7 @@
   </p>
 
   <p align="center">
-    <b>Cursor-Anchored 144Hz Radial Wheel</b> • <b>Adaptive Conversions</b> • <b>Crop & Studio Modals</b> • <b>Chaining Drop Shelf</b>
+    <b>Cursor-Anchored 144Hz Radial Wheel</b> • <b>Continuous Edge Hotspot & Corner Morphing</b> • <b>Crop & Studio Modals</b> • <b>Chaining Drop Shelf</b>
   </p>
 
 </div>
@@ -83,6 +83,20 @@ Mode 2 adapts dynamically based on what you drop:
 * 📜 **`LIST FILES`**: Opens an interactive archive inspector modal displaying all files, folder hierarchies, uncompressed byte sizes, and instant search filter.
 * 🧪 **`TEST ARCHIVE`**: Verifies CRC and decompression stream integrity across all contained files.
 * 🗜️ **`COMPRESS`**: Re-compresses archive into maximum-efficiency `.tar.zst` or optimized container.
+
+---
+
+### ⚡ Mode 3 — Draggable Edge Hotspot & Corner Morphing Studio
+
+A continuous, hardware-accelerated layer-shell perimeter bar that serves as an instant drop target and click launcher:
+
+* 🖱️ **Desktop Drag & Relocate**: Drag the hotspot directly along screen edges or around corners. Intelligent gesture discrimination distinguishes between clicks (< 6px to spawn the radial wheel) and drags (≥ 6px to relocate).
+* 🔒 **Position Lock Switch**: Lock the hotspot in place once positioned to prevent accidental desktop movements.
+* 🌀 **Continuous Corner Morphing**: When positioned at display corners, the hotspot automatically bends into a smooth L-curved arc with configurable corner radius, seamlessly bridging horizontal and vertical bezels.
+* 🖥️ **Interactive Desktop Simulator**: Real-time 16:9 screen preview canvas in the Hub with instant quick-snap buttons (`Top`, `Right`, `Bottom`, `Left`, and `Corners`).
+* 📏 **Dynamic Geometry Tuning**: Precision sliders for Length (80–450 px), Thickness (4–24 px), Margin from edge (0–40 px), and Corner Rounding (2–16 px).
+* 👁️ **Proximity Auto-Hide**: Stays ultra-dimmed (12% opacity) until the cursor approaches or files are dragged toward the screen edge.
+* 🎨 **Curated Wayland Themes**: 1-click coordination across **Electric Cyan**, **Tokyo Night**, **Catppuccin Mocha**, **Emerald Matrix**, **Solar Ember**, and **Monochrome Stealth**.
 
 ---
 
@@ -173,8 +187,8 @@ Download the standalone tarball directly from the [GitHub Releases Page](https:/
 
 ```bash
 # Download latest release
-tar -xvf hyprdrop-v0.1.1-linux-x86_64.tar.gz
-cd hyprdrop-v0.1.1-linux-x86_64
+tar -xvf hyprdrop-v0.2.0-linux-x86_64.tar.gz
+cd hyprdrop-v0.2.0-linux-x86_64
 
 # Run automatic setup
 ./hyprdrop setup

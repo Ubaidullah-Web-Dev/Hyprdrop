@@ -665,6 +665,55 @@ scale slider:hover {
     transform: scale(1.05);
 }
 
+/* Hotspot Studio & Palette Swatches */
+.hyprdrop-monitor-canvas {
+    background: transparent;
+    border-radius: 12px;
+}
+
+.hyprdrop-swatch-circle {
+    min-width: 20px;
+    min-height: 20px;
+    border-radius: 50%;
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    padding: 0;
+    transition: transform 140ms ease, box-shadow 140ms ease;
+}
+
+.hyprdrop-swatch-circle:hover {
+    transform: scale(1.22);
+    box-shadow: 0 0 10px rgba(255, 255, 255, 0.45);
+}
+
+.swatch-cyan { background-color: #00D2FF; }
+.swatch-emerald { background-color: #10B981; }
+.swatch-purple { background-color: #A855F7; }
+.swatch-amber { background-color: #F59E0B; }
+.swatch-rose { background-color: #EC4899; }
+.swatch-white { background-color: #F8FAFC; }
+.swatch-dark { background-color: #1E2230; }
+
+.hyprdrop-theme-card {
+    background-color: #14161F;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 12px;
+    padding: 16px;
+    transition: all 180ms ease;
+}
+
+.hyprdrop-theme-card:hover {
+    background-color: #181B26;
+    border-color: rgba(0, 210, 255, 0.25);
+    transform: translateY(-2px);
+}
+
+.hyprdrop-theme-pill {
+    min-width: 14px;
+    min-height: 14px;
+    border-radius: 50%;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
 /* Minimal Custom Scrollbar */
 scrollbar {
     background: transparent;

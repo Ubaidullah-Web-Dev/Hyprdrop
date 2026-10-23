@@ -8,6 +8,34 @@ fn default_true() -> bool {
     true
 }
 
+fn default_hotspot_length() -> u32 {
+    220
+}
+
+fn default_hotspot_thickness() -> u32 {
+    8
+}
+
+fn default_hotspot_corner_radius() -> u32 {
+    6
+}
+
+fn default_hotspot_pos() -> f64 {
+    0.41
+}
+
+fn default_hotspot_color() -> String {
+    "#161618".to_string()
+}
+
+fn default_hotspot_hover_color() -> String {
+    "#0A84FF".to_string()
+}
+
+fn default_hotspot_accent_color() -> String {
+    "#FF5722".to_string()
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
     pub output_dir: Option<PathBuf>,
@@ -18,6 +46,28 @@ pub struct AppConfig {
     pub drop_shelf_timeout_secs: u32,
     #[serde(default = "default_true")]
     pub autostart: bool,
+    #[serde(default = "default_true")]
+    pub hotspot_enabled: bool,
+    #[serde(default)]
+    pub hotspot_locked: bool,
+    #[serde(default = "default_hotspot_pos")]
+    pub hotspot_perimeter_pos: f64,
+    #[serde(default = "default_hotspot_length")]
+    pub hotspot_length: u32,
+    #[serde(default = "default_hotspot_thickness")]
+    pub hotspot_thickness: u32,
+    #[serde(default)]
+    pub hotspot_margin: i32,
+    #[serde(default = "default_hotspot_corner_radius")]
+    pub hotspot_corner_radius: u32,
+    #[serde(default)]
+    pub hotspot_auto_hide: bool,
+    #[serde(default = "default_hotspot_color")]
+    pub hotspot_color: String,
+    #[serde(default = "default_hotspot_hover_color")]
+    pub hotspot_hover_color: String,
+    #[serde(default = "default_hotspot_accent_color")]
+    pub hotspot_accent_color: String,
 }
 
 impl Default for AppConfig {
@@ -30,6 +80,17 @@ impl Default for AppConfig {
             show_drop_shelf: true,
             drop_shelf_timeout_secs: 15,
             autostart: true,
+            hotspot_enabled: true,
+            hotspot_locked: false,
+            hotspot_perimeter_pos: 0.41,
+            hotspot_length: 220,
+            hotspot_thickness: 8,
+            hotspot_margin: 0,
+            hotspot_corner_radius: 6,
+            hotspot_auto_hide: false,
+            hotspot_color: "#161618".to_string(),
+            hotspot_hover_color: "#0A84FF".to_string(),
+            hotspot_accent_color: "#FF5722".to_string(),
         }
     }
 }

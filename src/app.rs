@@ -219,6 +219,9 @@ impl HyprdropApp {
                         crate::hyprland::ensure_hyprland_floating_rules();
                         SettingsApp::spawn(&app_timer);
                     }
+                    IpcMessage::ReloadHotspot => {
+                        crate::ui::hotspot::HotspotWindow::reload(&app_timer);
+                    }
                     IpcMessage::Ping => {}
                 }
             }

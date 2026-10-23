@@ -197,7 +197,7 @@ if [ -z "${CUSTOM_NOTES}" ]; then
 fi
 
 echo "==> Committing version bump and tagging v${NEW_VER}..."
-git add Cargo.toml Cargo.lock PKGBUILD .SRCINFO packaging/ install.sh README.md src/ scripts/
+git add Cargo.toml Cargo.lock PKGBUILD .SRCINFO packaging/ install.sh README.md src/ tests/ docs/ scripts/
 git commit -m "${CUSTOM_MSG}" || echo "    (Nothing new to commit)"
 git tag -f "v${NEW_VER}"
 
