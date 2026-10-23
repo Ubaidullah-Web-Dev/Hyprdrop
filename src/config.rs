@@ -25,15 +25,38 @@ fn default_hotspot_pos() -> f64 {
 }
 
 fn default_hotspot_color() -> String {
-    "#161618".to_string()
-}
-
-fn default_hotspot_hover_color() -> String {
     "#0A84FF".to_string()
 }
 
+fn default_hotspot_hover_color() -> String {
+    "#38BDF8".to_string()
+}
+
 fn default_hotspot_accent_color() -> String {
-    "#FF5722".to_string()
+    "#0062CC".to_string()
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct AppTheme {
+    pub name: String,
+    pub primary: String,
+    pub secondary: String,
+    pub accent: String,
+    pub surface: String,
+    pub card_bg: String,
+}
+
+impl Default for AppTheme {
+    fn default() -> Self {
+        Self {
+            name: "Electric Blue (Default)".to_string(),
+            primary: "#0A84FF".to_string(),
+            secondary: "#38BDF8".to_string(),
+            accent: "#0062CC".to_string(),
+            surface: "#0D0E12".to_string(),
+            card_bg: "#14161F".to_string(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -68,6 +91,8 @@ pub struct AppConfig {
     pub hotspot_hover_color: String,
     #[serde(default = "default_hotspot_accent_color")]
     pub hotspot_accent_color: String,
+    #[serde(default)]
+    pub theme: AppTheme,
 }
 
 impl Default for AppConfig {
@@ -88,9 +113,10 @@ impl Default for AppConfig {
             hotspot_margin: 0,
             hotspot_corner_radius: 6,
             hotspot_auto_hide: false,
-            hotspot_color: "#161618".to_string(),
-            hotspot_hover_color: "#0A84FF".to_string(),
-            hotspot_accent_color: "#FF5722".to_string(),
+            hotspot_color: "#0A84FF".to_string(),
+            hotspot_hover_color: "#38BDF8".to_string(),
+            hotspot_accent_color: "#0062CC".to_string(),
+            theme: AppTheme::default(),
         }
     }
 }

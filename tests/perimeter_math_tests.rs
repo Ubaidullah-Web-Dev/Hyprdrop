@@ -71,3 +71,43 @@ fn test_normalized_position_conversion() {
     assert!((math.t_to_s(0.16) - 960.0).abs() < 1e-4);
     assert!((math.s_to_t(960.0) - 0.16).abs() < 1e-4);
 }
+
+#[test]
+fn test_dynamic_snap_points_1366x768() {
+    let math = PerimeterMath::new(1366.0, 768.0);
+    let p = math.total_perimeter();
+    assert_eq!(p, 4268.0);
+
+    // Top center: 1366 / 2 = 683
+    let t_top = math.snap_top_edge();
+    assert!((t_top - 683.0 / 4268.0).abs() < 1e-4);
+
+    // Top-right corner: 1366
+    let t_tr = math.snap_corner_top_right();
+    assert!((t_tr - 1366.0 / 4268.0).abs() < 1e-4);
+
+    // Right center: 1366 + 384 = 1750
+    let t_right = math.snap_right_edge();
+    assert!((t_right - 1750.0 / 4268.0).abs() < 1e-4);
+
+    // Bottom-right corner: 1366 + 768 = 2134
+    let t_br = math.snap_corner_bottom_right();
+    assert!((t_br - 2134.0 / 4268.0).abs() < 1e-4);
+
+    // Bottom center: 2134 + 683 = 2817
+    let t_bot = math.snap_bottom_edge();
+    assert!((t_bot - 2817.0 / 4268.0).abs() < 1e-4);
+
+    // Bottom-left corner: 2134 + 1366 = 3500 -> ~0.820056 (NOT 0.750!)
+    let t_bl = math.snap_corner_bottom_left();
+    assert!((t_bl - 3500.0 / 4268.0).abs() < 1e-4);
+    assert!((t_bl - 0.820056).abs() < 1e-4);
+
+    // Left center: 3500 + 384 = 3884
+    let t_left = math.snap_left_edge();
+    assert!((t_left - 3884.0 / 4268.0).abs() < 1e-4);
+
+    // Top-left corner: 0.0
+    let t_tl = math.snap_corner_top_left();
+    assert_eq!(t_tl, 0.0);
+}

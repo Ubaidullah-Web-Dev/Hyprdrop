@@ -93,10 +93,10 @@ A continuous, hardware-accelerated layer-shell perimeter bar that serves as an i
 * 🖱️ **Desktop Drag & Relocate**: Drag the hotspot directly along screen edges or around corners. Intelligent gesture discrimination distinguishes between clicks (< 6px to spawn the radial wheel) and drags (≥ 6px to relocate).
 * 🔒 **Position Lock Switch**: Lock the hotspot in place once positioned to prevent accidental desktop movements.
 * 🌀 **Continuous Corner Morphing**: When positioned at display corners, the hotspot automatically bends into a smooth L-curved arc with configurable corner radius, seamlessly bridging horizontal and vertical bezels.
-* 🖥️ **Interactive Desktop Simulator**: Real-time 16:9 screen preview canvas in the Hub with instant quick-snap buttons (`Top`, `Right`, `Bottom`, `Left`, and `Corners`).
-* 📏 **Dynamic Geometry Tuning**: Precision sliders for Length (80–450 px), Thickness (4–24 px), Margin from edge (0–40 px), and Corner Rounding (2–16 px).
+* 🖥️ **Interactive Desktop Simulator**: Real-time monitor aspect ratio canvas that dynamically detects your active display geometry (1366×768, 1080p, 1440p, 4K, 21:9 Ultrawide) with precision perimeter snap buttons (`Top`, `Right`, `Bottom`, `Left`, and `Corners`).
+* 📏 **Dynamic Geometry Tuning**: Flush zero-gap bezel attachment with precision sliders for Length (80–450 px), Thickness (4–24 px), Margin from edge (0–40 px), and Corner Rounding (2–16 px).
 * 👁️ **Proximity Auto-Hide**: Stays ultra-dimmed (12% opacity) until the cursor approaches or files are dragged toward the screen edge.
-* 🎨 **Curated Wayland Themes**: 1-click coordination across **Electric Cyan**, **Tokyo Night**, **Catppuccin Mocha**, **Emerald Matrix**, **Solar Ember**, and **Monochrome Stealth**.
+* 🎨 **Global Dynamic Theme Engine & Custom Creator**: Design custom themes with 5 accent & background swatches, or select from **20 curated master themes** (Electric Cyan, Tokyo Night, Catppuccin Mocha, Dracula, Gruvbox, Nord Frost, Synthwave '84, Emerald Matrix, Cyberpunk Gold, and more) that instantly re-theme the entire application across all Hub windows, navigation bars, cards, controls, shelves, and hotspots live.
 
 ---
 
@@ -187,8 +187,8 @@ Download the standalone tarball directly from the [GitHub Releases Page](https:/
 
 ```bash
 # Download latest release
-tar -xvf hyprdrop-v0.2.0-linux-x86_64.tar.gz
-cd hyprdrop-v0.2.0-linux-x86_64
+tar -xvf hyprdrop-v0.2.1-linux-x86_64.tar.gz
+cd hyprdrop-v0.2.1-linux-x86_64
 
 # Run automatic setup
 ./hyprdrop setup

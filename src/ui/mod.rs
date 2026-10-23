@@ -42,12 +42,19 @@ window.hyprdrop-overlay drawingarea,
 window.background.hyprdrop-hotspot,
 window.hyprdrop-hotspot.background,
 window.hyprdrop-hotspot,
-.hyprdrop-hotspot {
+window.hyprdrop-hotspot contents,
+window.hyprdrop-hotspot decoration,
+window.hyprdrop-hotspot widget,
+window.hyprdrop-hotspot drawingarea,
+window.hyprdrop-hotspot > *,
+.hyprdrop-hotspot,
+.hyprdrop-hotspot-canvas {
     background-color: transparent;
     background: transparent;
     background-image: none;
     box-shadow: none;
     border-style: none;
+    border: none;
 }
 
 .hyprdrop-hotspot-bar {
@@ -671,18 +678,30 @@ scale slider:hover {
     border-radius: 12px;
 }
 
+button.hyprdrop-swatch-circle,
 .hyprdrop-swatch-circle {
-    min-width: 20px;
-    min-height: 20px;
-    border-radius: 50%;
-    border: 1px solid rgba(255, 255, 255, 0.25);
+    min-width: 22px;
+    min-height: 22px;
+    border-radius: 9999px;
+    border: 1px solid rgba(255, 255, 255, 0.35);
     padding: 0;
+    margin: 0 3px;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+    background-image: none;
     transition: transform 140ms ease, box-shadow 140ms ease;
 }
 
+button.hyprdrop-swatch-circle:hover,
 .hyprdrop-swatch-circle:hover {
-    transform: scale(1.22);
-    box-shadow: 0 0 10px rgba(255, 255, 255, 0.45);
+    transform: scale(1.28);
+    border-color: #FFFFFF;
+    box-shadow: 0 0 12px rgba(255, 255, 255, 0.6);
+}
+
+.hyprdrop-active-theme-card {
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 12px;
+    padding: 16px 20px;
 }
 
 .swatch-cyan { background-color: #00D2FF; }
@@ -735,15 +754,212 @@ scrollbar slider:hover {
 }
 "#;
 
-pub fn init_css_theme() {
+use std::cell::RefCell;
+use crate::config::AppTheme;
+
+pub fn hex_to_rgb(hex: &str) -> (u8, u8, u8) {
+    let clean = hex.trim().trim_start_matches('#');
+    if clean.len() >= 6 {
+        if let (Ok(r), Ok(g), Ok(b)) = (
+            u8::from_str_radix(&clean[0..2], 16),
+            u8::from_str_radix(&clean[2..4], 16),
+            u8::from_str_radix(&clean[4..6], 16),
+        ) {
+            return (r, g, b);
+        }
+    }
+    (0, 210, 255)
+}
+
+pub fn generate_css_theme(theme: &AppTheme) -> String {
+    let (p_r, p_g, p_b) = hex_to_rgb(&theme.primary);
+    let (s_r, s_g, s_b) = hex_to_rgb(&theme.surface);
+
+    format!(r#"
+/* Dynamic Master Theme: {} */
+window.background.hyprdrop-hotspot,
+window.hyprdrop-hotspot.background,
+window.hyprdrop-hotspot,
+window.hyprdrop-hotspot contents,
+window.hyprdrop-hotspot decoration,
+window.hyprdrop-hotspot widget,
+window.hyprdrop-hotspot drawingarea,
+window.hyprdrop-hotspot > *,
+.hyprdrop-hotspot,
+.hyprdrop-hotspot-canvas {{
+    background-color: transparent;
+    background: transparent;
+    background-image: none;
+    box-shadow: none;
+    border-style: none;
+    border: none;
+}}
+
+.hyprdrop-active-theme-card {{
+    border-color: rgba({p_r}, {p_g}, {p_b}, 0.50);
+    background: linear-gradient(135deg, rgba({p_r}, {p_g}, {p_b}, 0.12) 0%, {card_bg} 100%);
+    box-shadow: 0 4px 24px rgba({p_r}, {p_g}, {p_b}, 0.20);
+}}
+
+.hyprdrop-theme-card-active {{
+    border: 2px solid {primary};
+    background-color: rgba({p_r}, {p_g}, {p_b}, 0.08);
+    box-shadow: 0 0 16px rgba({p_r}, {p_g}, {p_b}, 0.28);
+}}
+
+window:not(.hyprdrop-overlay):not(.hyprdrop-hotspot):not(.hyprdrop-shelf),
+window:not(.hyprdrop-overlay):not(.hyprdrop-hotspot):not(.hyprdrop-shelf) decoration,
+window:not(.hyprdrop-overlay):not(.hyprdrop-hotspot):not(.hyprdrop-shelf).csd,
+window:not(.hyprdrop-overlay):not(.hyprdrop-hotspot):not(.hyprdrop-shelf).solid-csd,
+window:not(.hyprdrop-overlay):not(.hyprdrop-hotspot):not(.hyprdrop-shelf) > box,
+.hyprdrop-surface,
+.hyprdrop-hub-window,
+.mac-window {{
+    background-color: {surface};
+    color: #F1F3F9;
+}}
+
+.hyprdrop-sidebar {{
+    background-color: rgba({s_r}, {s_g}, {s_b}, 0.98);
+    border-right: 1px solid rgba(255, 255, 255, 0.07);
+}}
+
+.hyprdrop-brand-icon {{
+    color: {primary};
+}}
+
+.hyprdrop-brand-badge {{
+    color: {primary};
+    background: rgba({p_r}, {p_g}, {p_b}, 0.14);
+    border: 1px solid rgba({p_r}, {p_g}, {p_b}, 0.35);
+}}
+
+.hyprdrop-nav-item.active {{
+    background: rgba({p_r}, {p_g}, {p_b}, 0.12);
+    border-left: 3px solid {primary};
+    color: {primary};
+    border-top: 1px solid rgba({p_r}, {p_g}, {p_b}, 0.22);
+    border-bottom: 1px solid rgba({p_r}, {p_g}, {p_b}, 0.22);
+    border-right: 1px solid rgba({p_r}, {p_g}, {p_b}, 0.22);
+}}
+
+.hyprdrop-nav-item.active .hyprdrop-nav-badge {{
+    background: rgba({p_r}, {p_g}, {p_b}, 0.26);
+    color: {primary};
+}}
+
+button.hyprdrop-primary,
+button.mac-primary {{
+    background: linear-gradient(180deg, {secondary} 0%, {accent} 100%);
+    color: #FFFFFF;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    box-shadow: 0 2px 10px rgba({p_r}, {p_g}, {p_b}, 0.38);
+}}
+
+button.hyprdrop-primary:hover,
+button.mac-primary:hover {{
+    background: linear-gradient(180deg, {primary} 0%, {secondary} 100%);
+    box-shadow: 0 4px 16px rgba({p_r}, {p_g}, {p_b}, 0.50);
+}}
+
+button.hyprdrop-pill.active,
+button.mac-pill.active {{
+    background-color: {primary};
+    color: #FFFFFF;
+    border-color: {secondary};
+    box-shadow: 0 2px 10px rgba({p_r}, {p_g}, {p_b}, 0.35);
+}}
+
+.hyprdrop-card,
+.mac-card,
+.hyprdrop-theme-card {{
+    background-color: {card_bg};
+    border: 1px solid rgba(255, 255, 255, 0.07);
+}}
+
+.hyprdrop-interactive-card {{
+    background-color: {card_bg};
+    border: 1px solid rgba(255, 255, 255, 0.06);
+}}
+
+.hyprdrop-theme-card:hover,
+.hyprdrop-interactive-card:hover {{
+    border-color: rgba({p_r}, {p_g}, {p_b}, 0.35);
+}}
+
+switch:checked {{
+    background-color: {primary};
+    border-color: {secondary};
+}}
+
+scale highlight {{
+    background: linear-gradient(90deg, {accent} 0%, {primary} 100%);
+}}
+
+entry:focus {{
+    border-color: {primary};
+    box-shadow: 0 0 0 2px rgba({p_r}, {p_g}, {p_b}, 0.25);
+}}
+
+.badge-info {{
+    background-color: rgba({p_r}, {p_g}, {p_b}, 0.14);
+    color: {primary};
+    border: 1px solid rgba({p_r}, {p_g}, {p_b}, 0.30);
+}}
+
+.hyprdrop-preview-pill,
+.hyprdrop-mono-badge {{
+    color: {primary};
+    background: rgba({p_r}, {p_g}, {p_b}, 0.10);
+    border: 1px solid rgba({p_r}, {p_g}, {p_b}, 0.28);
+}}
+
+.hyprdrop-shelf {{
+    background-color: rgba({s_r}, {s_g}, {s_b}, 0.96);
+    border: 1px solid rgba({p_r}, {p_g}, {p_b}, 0.32);
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.65), 0 0 24px rgba({p_r}, {p_g}, {p_b}, 0.20);
+}}
+"#,
+        theme.name,
+        surface = theme.surface,
+        card_bg = theme.card_bg,
+        primary = theme.primary,
+        secondary = theme.secondary,
+        accent = theme.accent,
+        s_r = s_r,
+        s_g = s_g,
+        s_b = s_b,
+        p_r = p_r,
+        p_g = p_g,
+        p_b = p_b,
+    )
+}
+
+thread_local! {
+    static ACTIVE_CSS_PROVIDER: RefCell<Option<CssProvider>> = const { RefCell::new(None) };
+}
+
+pub fn apply_theme(theme: &AppTheme) {
+    let css = format!("{}\n{}", CSS_THEME, generate_css_theme(theme));
     let provider = CssProvider::new();
-    provider.load_from_string(CSS_THEME);
+    provider.load_from_string(&css);
 
     if let Some(display) = Display::default() {
-        gtk4::style_context_add_provider_for_display(
-            &display,
-            &provider,
-            gtk4::STYLE_PROVIDER_PRIORITY_USER,
-        );
+        ACTIVE_CSS_PROVIDER.with(|cell| {
+            if let Some(old) = cell.borrow().as_ref() {
+                gtk4::style_context_remove_provider_for_display(&display, old);
+            }
+            gtk4::style_context_add_provider_for_display(
+                &display,
+                &provider,
+                gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION + 20,
+            );
+            *cell.borrow_mut() = Some(provider);
+        });
     }
+}
+
+pub fn init_css_theme() {
+    let cfg = crate::config::ConfigManager::load_config();
+    apply_theme(&cfg.theme);
 }

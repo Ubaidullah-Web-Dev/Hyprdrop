@@ -247,6 +247,22 @@ impl HotspotWindow {
 
         drawing_area.add_css_class("hyprdrop-hotspot-canvas");
 
+        #[allow(deprecated)]
+        {
+            let trans_prov = gtk4::CssProvider::new();
+            trans_prov.load_from_string(
+                "window, contents, decoration, widget, drawingarea, .hyprdrop-hotspot-canvas { \
+                 background-color: transparent; \
+                 background: transparent; \
+                 background-image: none; \
+                 box-shadow: none; \
+                 border: none; \
+                 }",
+            );
+            window.style_context().add_provider(&trans_prov, gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION + 50);
+            drawing_area.style_context().add_provider(&trans_prov, gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION + 50);
+        }
+
         let state_draw = state.clone();
         drawing_area.set_draw_func(move |_, cr, width, height| {
             let s = state_draw.borrow();
@@ -463,6 +479,19 @@ impl HotspotWindow {
         }
     }
 
+    /// Live hot-reloads the active hotspot colors without window recreate.
+    pub fn update_theme_live(color: &str, hover: &str, accent: &str) {
+        ACTIVE_HOTSPOT.with(|cell| {
+            if let Some(ctrl) = cell.borrow().as_ref() {
+                let mut s = ctrl.state.borrow_mut();
+                s.config.hotspot_color = color.to_string();
+                s.config.hotspot_hover_color = hover.to_string();
+                s.config.hotspot_accent_color = accent.to_string();
+                ctrl.drawing_area.queue_draw();
+            }
+        });
+    }
+
     /// Checks if the edge drop target hotspot is currently active.
     pub fn is_active() -> bool {
         ACTIVE_HOTSPOT.with(|cell| cell.borrow().is_some())
@@ -470,6 +499,12 @@ impl HotspotWindow {
 
     /// Draws the morphing hotspot pill or bent-corner arc with Cairo.
     fn draw_hotspot(cr: &Context, width: f64, height: f64, state: &HotspotState) {
+        // Ensure 100% transparent canvas background - clears all backbuffer pixels
+        cr.save().ok();
+        cr.set_operator(cairo::Operator::Clear);
+        let _ = cr.paint();
+        cr.restore().ok();
+
         let _ = cr.save();
 
         let math = PerimeterMath::new(state.monitor_w, state.monitor_h);
@@ -502,13 +537,14 @@ impl HotspotWindow {
         let radius = (state.config.hotspot_corner_radius as f64).min(thickness / 2.0);
 
         match span.edge {
-            ScreenEdge::Top | ScreenEdge::Bottom => {
-                // Horizontal Island Pill
+            ScreenEdge::Top => {
+                // Horizontal Island Pill flush against top screen edge
                 let pill_w = width - 4.0;
                 let pill_h = thickness;
-                let y = (height - pill_h) / 2.0;
+                let x = 2.0;
+                let y = 0.0;
 
-                Self::draw_rounded_rect(cr, 2.0, y, pill_w, pill_h, radius);
+                Self::draw_rounded_rect(cr, x, y, pill_w, pill_h, radius);
                 cr.set_source_rgba(r, g, b, alpha);
                 let _ = cr.fill_preserve();
 
@@ -522,13 +558,56 @@ impl HotspotWindow {
                     Self::draw_grip_dots(cr, width / 2.0, y + pill_h / 2.0, true);
                 }
             }
-            ScreenEdge::Right | ScreenEdge::Left => {
-                // Vertical Island Pill
+            ScreenEdge::Bottom => {
+                // Horizontal Island Pill flush against bottom screen edge
+                let pill_w = width - 4.0;
+                let pill_h = thickness;
+                let x = 2.0;
+                let y = height - pill_h;
+
+                Self::draw_rounded_rect(cr, x, y, pill_w, pill_h, radius);
+                cr.set_source_rgba(r, g, b, alpha);
+                let _ = cr.fill_preserve();
+
+                // Subtle rim border
+                cr.set_source_rgba(1.0, 1.0, 1.0, 0.18);
+                cr.set_line_width(1.0);
+                let _ = cr.stroke();
+
+                // Tactile grip dots if unlocked
+                if !state.config.hotspot_locked {
+                    Self::draw_grip_dots(cr, width / 2.0, y + pill_h / 2.0, true);
+                }
+            }
+            ScreenEdge::Right => {
+                // Vertical Island Pill flush against right screen edge
                 let pill_w = thickness;
                 let pill_h = height - 4.0;
-                let x = (width - pill_w) / 2.0;
+                let x = width - pill_w;
+                let y = 2.0;
 
-                Self::draw_rounded_rect(cr, x, 2.0, pill_w, pill_h, radius);
+                Self::draw_rounded_rect(cr, x, y, pill_w, pill_h, radius);
+                cr.set_source_rgba(r, g, b, alpha);
+                let _ = cr.fill_preserve();
+
+                // Subtle rim border
+                cr.set_source_rgba(1.0, 1.0, 1.0, 0.18);
+                cr.set_line_width(1.0);
+                let _ = cr.stroke();
+
+                // Tactile grip dots if unlocked
+                if !state.config.hotspot_locked {
+                    Self::draw_grip_dots(cr, x + pill_w / 2.0, height / 2.0, false);
+                }
+            }
+            ScreenEdge::Left => {
+                // Vertical Island Pill flush against left screen edge
+                let pill_w = thickness;
+                let pill_h = height - 4.0;
+                let x = 0.0;
+                let y = 2.0;
+
+                Self::draw_rounded_rect(cr, x, y, pill_w, pill_h, radius);
                 cr.set_source_rgba(r, g, b, alpha);
                 let _ = cr.fill_preserve();
 
@@ -609,13 +688,13 @@ impl HotspotWindow {
         use std::f64::consts::PI;
         cr.new_sub_path();
 
-        if is_right && !is_bottom {
-            // Top-Right Corner
-            let x0 = 2.0;
-            let y0 = 2.0;
-            let x1 = width - 2.0;
-            let y1 = height - 2.0;
+        let x0 = 0.0;
+        let y0 = 0.0;
+        let x1 = width;
+        let y1 = height;
 
+        if is_right && !is_bottom {
+            // Top-Right Corner flush against top & right bezel
             cr.move_to(x0, y0 + thickness);
             cr.line_to(x0, y0);
             cr.arc(x1 - radius, y0 + radius, radius, -PI / 2.0, 0.0);
@@ -624,12 +703,7 @@ impl HotspotWindow {
             cr.line_to(x1 - thickness, y0 + thickness);
             cr.close_path();
         } else if is_right && is_bottom {
-            // Bottom-Right Corner
-            let x0 = 2.0;
-            let y0 = 2.0;
-            let x1 = width - 2.0;
-            let y1 = height - 2.0;
-
+            // Bottom-Right Corner flush against bottom & right bezel
             cr.move_to(x1, y0);
             cr.line_to(x1, y1 - radius);
             cr.arc(x1 - radius, y1 - radius, radius, 0.0, PI / 2.0);
@@ -639,12 +713,7 @@ impl HotspotWindow {
             cr.line_to(x1 - thickness, y0);
             cr.close_path();
         } else if !is_right && is_bottom {
-            // Bottom-Left Corner
-            let x0 = 2.0;
-            let y0 = 2.0;
-            let x1 = width - 2.0;
-            let y1 = height - 2.0;
-
+            // Bottom-Left Corner flush against bottom & left bezel
             cr.move_to(x0, y0);
             cr.line_to(x0, y1 - radius);
             cr.arc(x0 + radius, y1 - radius, radius, PI, PI / 2.0);
@@ -654,12 +723,7 @@ impl HotspotWindow {
             cr.line_to(x0 + thickness, y0);
             cr.close_path();
         } else {
-            // Top-Left Corner
-            let x0 = 2.0;
-            let y0 = 2.0;
-            let x1 = width - 2.0;
-            let y1 = height - 2.0;
-
+            // Top-Left Corner flush against top & left bezel
             cr.move_to(x0, y1);
             cr.line_to(x0, y0 + radius);
             cr.arc(x0 + radius, y0 + radius, radius, PI, 3.0 * PI / 2.0);

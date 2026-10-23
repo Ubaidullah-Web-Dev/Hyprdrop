@@ -5,7 +5,7 @@ use std::rc::Rc;
 use gtk4::prelude::*;
 use gtk4::cairo::Context;
 
-use crate::config::{AppConfig, ConfigManager, HistoryRecord};
+use crate::config::{AppConfig, AppTheme, ConfigManager, HistoryRecord};
 use crate::engine::format_file_size;
 use crate::engine::perimeter_math::{PerimeterMath, ScreenEdge};
 use crate::hyprland::installer::{
@@ -35,6 +35,9 @@ impl SettingsApp {
         if already_open {
             return;
         }
+
+        let cfg_init = ConfigManager::load_config();
+        crate::ui::apply_theme(&cfg_init.theme);
 
         let window = gtk4::ApplicationWindow::builder()
             .application(app)
@@ -260,7 +263,7 @@ impl SettingsApp {
         let nav_buttons = [
             (nav_activity.clone(), "activity", "Activity Log", "Recent file transformations, optimizations and studio exports"),
             (nav_hotspot.clone(), "hotspot", "Edge Hotspot Studio", "Interactive perimeter placement, corner morphing and dynamic sizing"),
-            (nav_themes.clone(), "themes", "Themes & Colors", "Curated color themes and aesthetic palettes for edge hotspot and wheel"),
+            (nav_themes.clone(), "themes", "Themes & Colors", "Global aesthetic themes & custom palette creator for every menu and widget"),
             (nav_prefs.clone(), "preferences", "Preferences", "Global naming rules, compression thresholds and workflow options"),
             (nav_system.clone(), "system", "Hyprland & Health", "Window rules, blur layers and system engine diagnostics"),
         ];
@@ -502,6 +505,15 @@ fn build_hotspot_studio_tab() -> gtk4::Box {
     let content_box = gtk4::Box::new(gtk4::Orientation::Vertical, 16);
     let cfg = Rc::new(RefCell::new(ConfigManager::load_config()));
 
+    // Dynamically query user's actual screen resolution
+    let (mon_w, mon_h) = if let Some(mon) = crate::hyprland::get_focused_monitor() {
+        let scale = mon.scale.max(0.1);
+        ((mon.width as f64 / scale), (mon.height as f64 / scale))
+    } else {
+        (1920.0, 1080.0)
+    };
+    let monitor_math = PerimeterMath::new(mon_w, mon_h);
+
     // --- CARD 1: Interactive Screen Simulator & Quick Snap ---
     let sim_card = gtk4::Box::new(gtk4::Orientation::Vertical, 12);
     sim_card.add_css_class("hyprdrop-card");
@@ -510,7 +522,10 @@ fn build_hotspot_studio_tab() -> gtk4::Box {
     let sim_title_col = gtk4::Box::new(gtk4::Orientation::Vertical, 2);
     sim_title_col.set_hexpand(true);
 
-    let sim_title = gtk4::Label::new(Some("Interactive Desktop Screen Simulator"));
+    let sim_title = gtk4::Label::new(Some(&format!(
+        "Interactive Desktop Screen Simulator ({:.0}×{:.0})",
+        mon_w, mon_h
+    )));
     sim_title.add_css_class("hyprdrop-title");
     sim_title.set_halign(gtk4::Align::Start);
     sim_title_col.append(&sim_title);
@@ -525,22 +540,24 @@ fn build_hotspot_studio_tab() -> gtk4::Box {
 
     // Initial Span Edge Calculation for Status Badge
     let initial_pos = cfg.borrow().hotspot_perimeter_pos;
-    let initial_math = PerimeterMath::new(1920.0, 1080.0);
-    let initial_span = initial_math.calculate_span(initial_math.t_to_s(initial_pos), cfg.borrow().hotspot_length as f64);
+    let initial_span = monitor_math.calculate_span(monitor_math.t_to_s(initial_pos), cfg.borrow().hotspot_length as f64);
     let edge_badge = gtk4::Label::new(Some(&format!("● {} ({:.1}%)", PerimeterMath::edge_name(&initial_span.edge), initial_pos * 100.0)));
     edge_badge.add_css_class("badge-info");
     sim_header.append(&edge_badge);
     sim_card.append(&sim_header);
 
-    // Drawing Canvas for Monitor Simulation (440x220)
+    // Drawing Canvas for Monitor Simulation (Dynamic aspect ratio based on user screen)
     let drawing_area = gtk4::DrawingArea::new();
-    drawing_area.set_content_width(440);
-    drawing_area.set_content_height(220);
+    let aspect = mon_w / mon_h;
+    let canvas_h = 210;
+    let canvas_w = ((canvas_h as f64) * aspect).clamp(320.0, 480.0) as i32;
+    drawing_area.set_content_width(canvas_w);
+    drawing_area.set_content_height(canvas_h);
     drawing_area.add_css_class("hyprdrop-monitor-canvas");
 
     let cfg_draw = cfg.clone();
     drawing_area.set_draw_func(move |_area, cr, width, height| {
-        draw_mini_monitor(cr, width as f64, height as f64, &cfg_draw.borrow());
+        draw_mini_monitor(cr, width as f64, height as f64, &cfg_draw.borrow(), mon_w, mon_h);
     });
 
     // Outer center alignment for monitor
@@ -567,26 +584,26 @@ fn build_hotspot_studio_tab() -> gtk4::Box {
             let cur_x = start_x + offset_x;
             let cur_y = start_y + offset_y;
 
-            // Monitor screen bounds
             let sx = 28.0;
             let sy = 20.0;
-            let sw = 440.0 - 56.0;
-            let sh = 220.0 - 54.0;
+            let sw = (canvas_w as f64) - 56.0;
+            let sh = (canvas_h as f64) - 54.0;
 
             let px = (cur_x - sx).clamp(0.0, sw);
             let py = (cur_y - sy).clamp(0.0, sh);
 
-            let mini_math = PerimeterMath::new(sw, sh);
-            let s = mini_math.cursor_to_perimeter_s(px, py);
-            let t = mini_math.s_to_t(s).clamp(0.0, 0.9999);
+            let real_x = (px / sw * mon_w).clamp(0.0, mon_w);
+            let real_y = (py / sh * mon_h).clamp(0.0, mon_h);
+
+            let s = monitor_math.cursor_to_perimeter_s(real_x, real_y);
+            let t = monitor_math.s_to_t(s).clamp(0.0, 0.9999);
 
             cfg_drag.borrow_mut().hotspot_perimeter_pos = t;
             let _ = ConfigManager::save_config(&cfg_drag.borrow());
             let _ = IpcClient::send(&IpcMessage::ReloadHotspot);
 
             pos_scale_drag.set_value(t * 100.0);
-            let math = PerimeterMath::new(1920.0, 1080.0);
-            let span = math.calculate_span(math.t_to_s(t), cfg_drag.borrow().hotspot_length as f64);
+            let span = monitor_math.calculate_span(monitor_math.t_to_s(t), cfg_drag.borrow().hotspot_length as f64);
             edge_badge_drag.set_text(&format!("● {} ({:.1}%)", PerimeterMath::edge_name(&span.edge), t * 100.0));
             da_drag.queue_draw();
         }
@@ -594,7 +611,7 @@ fn build_hotspot_studio_tab() -> gtk4::Box {
 
     drawing_area.add_controller(drag_gesture);
 
-    // Quick Snap Buttons Rows
+    // Dynamic Quick Snap Buttons using exact screen geometry
     let snap_container = gtk4::Box::new(gtk4::Orientation::Vertical, 6);
     snap_container.set_margin_top(4);
 
@@ -606,10 +623,10 @@ fn build_hotspot_studio_tab() -> gtk4::Box {
     row1.append(&row1_lbl);
 
     let edge_snaps = [
-        ("Top Edge", 0.125),
-        ("Right Edge", 0.375),
-        ("Bottom Edge", 0.625),
-        ("Left Edge", 0.875),
+        ("Top Edge", monitor_math.snap_top_edge()),
+        ("Right Edge", monitor_math.snap_right_edge()),
+        ("Bottom Edge", monitor_math.snap_bottom_edge()),
+        ("Left Edge", monitor_math.snap_left_edge()),
     ];
 
     for (name, target_t) in edge_snaps {
@@ -626,8 +643,7 @@ fn build_hotspot_studio_tab() -> gtk4::Box {
             let _ = ConfigManager::save_config(&cfg_s.borrow());
             let _ = IpcClient::send(&IpcMessage::ReloadHotspot);
             ps_s.set_value(target_t * 100.0);
-            let math = PerimeterMath::new(1920.0, 1080.0);
-            let span = math.calculate_span(math.t_to_s(target_t), cfg_s.borrow().hotspot_length as f64);
+            let span = monitor_math.calculate_span(monitor_math.t_to_s(target_t), cfg_s.borrow().hotspot_length as f64);
             badge_s.set_text(&format!("● {} ({:.1}%)", PerimeterMath::edge_name(&span.edge), target_t * 100.0));
             da_s.queue_draw();
         });
@@ -643,10 +659,10 @@ fn build_hotspot_studio_tab() -> gtk4::Box {
     row2.append(&row2_lbl);
 
     let corner_snaps = [
-        ("Top-Right ↱", 0.250),
-        ("Bottom-Right ↳", 0.500),
-        ("Bottom-Left ↲", 0.750),
-        ("Top-Left ↰", 0.000),
+        ("Top-Right ↱", monitor_math.snap_corner_top_right()),
+        ("Bottom-Right ↳", monitor_math.snap_corner_bottom_right()),
+        ("Bottom-Left ↲", monitor_math.snap_corner_bottom_left()),
+        ("Top-Left ↰", monitor_math.snap_corner_top_left()),
     ];
 
     for (name, target_t) in corner_snaps {
@@ -663,8 +679,7 @@ fn build_hotspot_studio_tab() -> gtk4::Box {
             let _ = ConfigManager::save_config(&cfg_s.borrow());
             let _ = IpcClient::send(&IpcMessage::ReloadHotspot);
             ps_s.set_value(target_t * 100.0);
-            let math = PerimeterMath::new(1920.0, 1080.0);
-            let span = math.calculate_span(math.t_to_s(target_t), cfg_s.borrow().hotspot_length as f64);
+            let span = monitor_math.calculate_span(monitor_math.t_to_s(target_t), cfg_s.borrow().hotspot_length as f64);
             badge_s.set_text(&format!("● {} ({:.1}%)", PerimeterMath::edge_name(&span.edge), target_t * 100.0));
             da_s.queue_draw();
         });
@@ -768,8 +783,7 @@ fn build_hotspot_studio_tab() -> gtk4::Box {
         let _ = ConfigManager::save_config(&cfg_pos.borrow());
         let _ = IpcClient::send(&IpcMessage::ReloadHotspot);
         pos_val_clone.set_text(&format!("{:.1}%", s.value()));
-        let math = PerimeterMath::new(1920.0, 1080.0);
-        let span = math.calculate_span(math.t_to_s(t), cfg_pos.borrow().hotspot_length as f64);
+        let span = monitor_math.calculate_span(monitor_math.t_to_s(t), cfg_pos.borrow().hotspot_length as f64);
         badge_pos.set_text(&format!("● {} ({:.1}%)", PerimeterMath::edge_name(&span.edge), s.value()));
         da_pos.queue_draw();
     });
@@ -821,7 +835,7 @@ fn build_hotspot_studio_tab() -> gtk4::Box {
     // 4. Margin from Screen Edge Slider
     let (margin_row, margin_scale, _) = create_slider_row(
         "Distance From Edge",
-        "Inset spacing between monitor bezel and hotspot bar",
+        "Inset spacing between monitor bezel and hotspot bar (0px = fully attached)",
         0.0,
         40.0,
         2.0,
@@ -869,7 +883,6 @@ fn build_hotspot_studio_tab() -> gtk4::Box {
     b_title.set_halign(gtk4::Align::Start);
     beh_card.append(&b_title);
 
-    // Enable hotspot toggle
     let en_row = gtk4::Box::new(gtk4::Orientation::Horizontal, 12);
     let en_text = gtk4::Box::new(gtk4::Orientation::Vertical, 2);
     en_text.set_hexpand(true);
@@ -901,7 +914,6 @@ fn build_hotspot_studio_tab() -> gtk4::Box {
     en_row.append(&en_switch);
     beh_card.append(&en_row);
 
-    // Proximity auto-hide toggle
     let ah_row = gtk4::Box::new(gtk4::Orientation::Horizontal, 12);
     let ah_text = gtk4::Box::new(gtk4::Orientation::Vertical, 2);
     ah_text.set_hexpand(true);
@@ -934,87 +946,6 @@ fn build_hotspot_studio_tab() -> gtk4::Box {
     beh_card.append(&ah_row);
     content_box.append(&beh_card);
 
-    // --- CARD 5: Custom Color & Glow Styling ---
-    let col_card = gtk4::Box::new(gtk4::Orientation::Vertical, 14);
-    col_card.add_css_class("hyprdrop-card");
-
-    let c_title = gtk4::Label::new(Some("Color & Luminescence Customization"));
-    c_title.add_css_class("hyprdrop-title");
-    c_title.set_halign(gtk4::Align::Start);
-    col_card.append(&c_title);
-
-    let swatches = [
-        ("#00D2FF", "swatch-cyan"),
-        ("#10B981", "swatch-emerald"),
-        ("#A855F7", "swatch-purple"),
-        ("#F59E0B", "swatch-amber"),
-        ("#EC4899", "swatch-rose"),
-        ("#F8FAFC", "swatch-white"),
-        ("#1E2230", "swatch-dark"),
-    ];
-
-    // Base Color Row
-    let (base_row, base_entry) = create_swatch_color_row(
-        "Base Hotspot Color",
-        "Primary idle tone of the tactile perimeter bar",
-        &cfg.borrow().hotspot_color,
-        &swatches,
-    );
-    let cfg_base = cfg.clone();
-    let da_base = drawing_area.clone();
-    base_entry.connect_changed(move |e| {
-        let hex = e.text().to_string();
-        if hex.starts_with('#') && hex.len() >= 7 {
-            cfg_base.borrow_mut().hotspot_color = hex;
-            let _ = ConfigManager::save_config(&cfg_base.borrow());
-            let _ = IpcClient::send(&IpcMessage::ReloadHotspot);
-            da_base.queue_draw();
-        }
-    });
-    col_card.append(&base_row);
-
-    // Hover Color Row
-    let (hov_row, hov_entry) = create_swatch_color_row(
-        "Hover Luminescence",
-        "Glow color when cursor hovers near or over the hotspot",
-        &cfg.borrow().hotspot_hover_color,
-        &swatches,
-    );
-    let cfg_hov = cfg.clone();
-    let da_hov = drawing_area.clone();
-    hov_entry.connect_changed(move |e| {
-        let hex = e.text().to_string();
-        if hex.starts_with('#') && hex.len() >= 7 {
-            cfg_hov.borrow_mut().hotspot_hover_color = hex;
-            let _ = ConfigManager::save_config(&cfg_hov.borrow());
-            let _ = IpcClient::send(&IpcMessage::ReloadHotspot);
-            da_hov.queue_draw();
-        }
-    });
-    col_card.append(&hov_row);
-
-    // Accent Color Row
-    let (act_row, act_entry) = create_swatch_color_row(
-        "Active Drop Accent",
-        "Highlight aura when dragged files enter drop target boundary",
-        &cfg.borrow().hotspot_accent_color,
-        &swatches,
-    );
-    let cfg_act = cfg.clone();
-    let da_act = drawing_area.clone();
-    act_entry.connect_changed(move |e| {
-        let hex = e.text().to_string();
-        if hex.starts_with('#') && hex.len() >= 7 {
-            cfg_act.borrow_mut().hotspot_accent_color = hex;
-            let _ = ConfigManager::save_config(&cfg_act.borrow());
-            let _ = IpcClient::send(&IpcMessage::ReloadHotspot);
-            da_act.queue_draw();
-        }
-    });
-    col_card.append(&act_row);
-
-    content_box.append(&col_card);
-
     // Save & Feedback Row
     let save_row = gtk4::Box::new(gtk4::Orientation::Horizontal, 12);
     save_row.set_margin_top(8);
@@ -1041,67 +972,244 @@ fn build_hotspot_studio_tab() -> gtk4::Box {
 }
 
 // ============================================================================
-// 3. APPEARANCE & THEMES TAB
+// 3. APPEARANCE & THEMES TAB (Custom Theme Creator + 20 Curated Themes)
 // ============================================================================
-struct ThemePreset {
+struct ThemePresetInfo {
     name: &'static str,
     desc: &'static str,
-    base: &'static str,
-    hover: &'static str,
+    primary: &'static str,
+    secondary: &'static str,
     accent: &'static str,
-    css_class: &'static str,
+    surface: &'static str,
+    card_bg: &'static str,
 }
 
-const THEME_PRESETS: &[ThemePreset] = &[
-    ThemePreset {
+const ALL_THEME_PRESETS: &[ThemePresetInfo] = &[
+    ThemePresetInfo {
+        name: "Electric Blue (Default)",
+        desc: "The classic Hyprdrop electric blue with vibrant luminescence and deep dark surface",
+        primary: "#0A84FF",
+        secondary: "#38BDF8",
+        accent: "#0062CC",
+        surface: "#0D0E12",
+        card_bg: "#14161F",
+    },
+    ThemePresetInfo {
         name: "Electric Cyan",
-        desc: "Signature Wayland electric cyan with razor luminescence",
-        base: "#00D2FF",
-        hover: "#38BDF8",
+        desc: "Signature Hyprdrop Wayland electric cyan with high luminescence",
+        primary: "#00D2FF",
+        secondary: "#38BDF8",
         accent: "#0284C7",
-        css_class: "swatch-cyan",
+        surface: "#0D0E12",
+        card_bg: "#14161F",
     },
-    ThemePreset {
+    ThemePresetInfo {
         name: "Tokyo Night",
-        desc: "Iconic Japanese neon nightscape palette with violet and deep indigo",
-        base: "#BB9AF7",
-        hover: "#C0CAF5",
+        desc: "Iconic Japanese neon nightscape with violet and deep indigo",
+        primary: "#BB9AF7",
+        secondary: "#C0CAF5",
         accent: "#7AA2F7",
-        css_class: "swatch-purple",
+        surface: "#1A1B26",
+        card_bg: "#24283B",
     },
-    ThemePreset {
+    ThemePresetInfo {
         name: "Catppuccin Mocha",
-        desc: "Comforting pastel lavender, mauve and flamingo for cozy dark setups",
-        base: "#89B4FA",
-        hover: "#CBA6F7",
+        desc: "Comforting pastel lavender, mauve, and flamingo for cozy setups",
+        primary: "#89B4FA",
+        secondary: "#CBA6F7",
         accent: "#F5C2E7",
-        css_class: "swatch-cyan",
+        surface: "#1E1E2E",
+        card_bg: "#2A2B3D",
     },
-    ThemePreset {
+    ThemePresetInfo {
+        name: "Catppuccin Macchiato",
+        desc: "Soft pastel mauve, teal, and peach warm night tones",
+        primary: "#8BD5CA",
+        secondary: "#C6A0F6",
+        accent: "#F0C6C6",
+        surface: "#24273A",
+        card_bg: "#363A4F",
+    },
+    ThemePresetInfo {
+        name: "Dracula Classic",
+        desc: "Vampiric gothic orchid purple, neon pink, and bright mint",
+        primary: "#BD93F9",
+        secondary: "#FF79C6",
+        accent: "#50FA7B",
+        surface: "#282A36",
+        card_bg: "#383A59",
+    },
+    ThemePresetInfo {
+        name: "Gruvbox Dark",
+        desc: "Warm retro golden amber, bright orange, and earthy olive",
+        primary: "#FABD2F",
+        secondary: "#FE8019",
+        accent: "#B8BB26",
+        surface: "#282828",
+        card_bg: "#3C3836",
+    },
+    ThemePresetInfo {
+        name: "Nord Frost",
+        desc: "Arctic glacial turquoise, polar blue, and deep navy",
+        primary: "#88C0D0",
+        secondary: "#81A1C1",
+        accent: "#5E81AC",
+        surface: "#2E3440",
+        card_bg: "#3B4252",
+    },
+    ThemePresetInfo {
+        name: "Solarized Dark",
+        desc: "Deep atmospheric cyan with warm solarized amber accents",
+        primary: "#2AA198",
+        secondary: "#268BD2",
+        accent: "#B58900",
+        surface: "#002B36",
+        card_bg: "#073642",
+    },
+    ThemePresetInfo {
+        name: "Rose Pine",
+        desc: "Moody sunset dusty rose, warm gold, and coastal pine",
+        primary: "#EB6F92",
+        secondary: "#F6C177",
+        accent: "#9CCFD8",
+        surface: "#191724",
+        card_bg: "#26233A",
+    },
+    ThemePresetInfo {
+        name: "Synthwave '84",
+        desc: "Radical retro neon magenta, electric laser cyan, and hot sunset",
+        primary: "#FF7EDB",
+        secondary: "#36F9F6",
+        accent: "#FE4450",
+        surface: "#262335",
+        card_bg: "#34294F",
+    },
+    ThemePresetInfo {
         name: "Emerald Matrix",
-        desc: "Crisp cybernetic emerald green optimized for laser focus",
-        base: "#10B981",
-        hover: "#34D399",
+        desc: "Cybernetic high-contrast terminal emerald green for laser focus",
+        primary: "#10B981",
+        secondary: "#34D399",
         accent: "#059669",
-        css_class: "swatch-emerald",
+        surface: "#06140D",
+        card_bg: "#0C2418",
     },
-    ThemePreset {
-        name: "Solar Ember",
-        desc: "Warm amber and intense solar flares for warm workspace desk setups",
-        base: "#F59E0B",
-        hover: "#FBBF24",
+    ThemePresetInfo {
+        name: "Crimson Velvet",
+        desc: "Deep royal ruby and blood red with rich wine depth",
+        primary: "#EF4444",
+        secondary: "#F87171",
+        accent: "#B91C1C",
+        surface: "#180B0B",
+        card_bg: "#281212",
+    },
+    ThemePresetInfo {
+        name: "Sunset Horizon",
+        desc: "Warm peach, radiant coral, and burning blood orange",
+        primary: "#FB923C",
+        secondary: "#F43F5E",
         accent: "#EA580C",
-        css_class: "swatch-amber",
+        surface: "#160E0A",
+        card_bg: "#261812",
     },
-    ThemePreset {
-        name: "Monochrome Stealth",
-        desc: "Pure minimalist industrial monochrome for distraction-free workflows",
-        base: "#E2E8F0",
-        hover: "#FFFFFF",
+    ThemePresetInfo {
+        name: "Monokai Pro",
+        desc: "Vivid high-contrast sunburst chartreuse, orange, and magenta",
+        primary: "#FFD866",
+        secondary: "#FC9867",
+        accent: "#FF6188",
+        surface: "#2D2A2E",
+        card_bg: "#3A353B",
+    },
+    ThemePresetInfo {
+        name: "Abyss Deep Blue",
+        desc: "Oceanic deep azure, royal blue, and electric cobalt",
+        primary: "#3B82F6",
+        secondary: "#60A5FA",
+        accent: "#1D4ED8",
+        surface: "#0A0F1D",
+        card_bg: "#131B33",
+    },
+    ThemePresetInfo {
+        name: "Cyberpunk Gold",
+        desc: "Night City radiant neon yellow with cybernetic turquoise",
+        primary: "#FACC15",
+        secondary: "#FDE047",
+        accent: "#06B6D4",
+        surface: "#121204",
+        card_bg: "#212108",
+    },
+    ThemePresetInfo {
+        name: "Lavender Dream",
+        desc: "Ethereal soothing lilac, twilight purple, and soft orchid",
+        primary: "#A78BFA",
+        secondary: "#C4B5FD",
+        accent: "#8B5CF6",
+        surface: "#13101E",
+        card_bg: "#221C35",
+    },
+    ThemePresetInfo {
+        name: "Coffee Roast",
+        desc: "Rich dark espresso, warm caramel, and golden roasted mocha",
+        primary: "#D97706",
+        secondary: "#F59E0B",
+        accent: "#92400E",
+        surface: "#19120C",
+        card_bg: "#2B1D14",
+    },
+    ThemePresetInfo {
+        name: "Mint Modern",
+        desc: "Crisp fresh spearmint, eucalyptus, and deep pine contrast",
+        primary: "#2DD4BF",
+        secondary: "#5EEAD4",
+        accent: "#0F766E",
+        surface: "#071513",
+        card_bg: "#0E2925",
+    },
+    ThemePresetInfo {
+        name: "Midnight OLED",
+        desc: "Pure absolute black stealth monochrome with diamond accents",
+        primary: "#E2E8F0",
+        secondary: "#F8FAFC",
         accent: "#64748B",
-        css_class: "swatch-white",
+        surface: "#000000",
+        card_bg: "#0F0F12",
     },
 ];
+
+struct PresetCardRow {
+    card: gtk4::Box,
+    apply_btn: gtk4::Button,
+    badge: gtk4::Label,
+    theme: AppTheme,
+}
+
+fn update_active_swatches(box_container: &gtk4::Box, theme: &AppTheme) {
+    while let Some(child) = box_container.first_child() {
+        box_container.remove(&child);
+    }
+    let colors = [
+        (&theme.primary, "Primary"),
+        (&theme.secondary, "Secondary"),
+        (&theme.accent, "Accent"),
+        (&theme.surface, "Surface"),
+        (&theme.card_bg, "Card"),
+    ];
+    for (hex, label) in colors {
+        let pill = gtk4::Label::new(None);
+        pill.set_tooltip_text(Some(&format!("{}: {}", label, hex)));
+        pill.add_css_class("hyprdrop-theme-pill");
+        #[allow(deprecated)]
+        {
+            let provider = gtk4::CssProvider::new();
+            provider.load_from_string(&format!(
+                "label {{ background-color: {}; min-width: 18px; min-height: 18px; border-radius: 9999px; border: 1px solid rgba(255,255,255,0.3); }}",
+                hex
+            ));
+            pill.style_context().add_provider(&provider, gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION + 40);
+        }
+        box_container.append(&pill);
+    }
+}
 
 fn build_themes_tab() -> gtk4::Box {
     let box_view = gtk4::Box::new(gtk4::Orientation::Vertical, 16);
@@ -1117,52 +1225,225 @@ fn build_themes_tab() -> gtk4::Box {
         .build();
 
     let content_box = gtk4::Box::new(gtk4::Orientation::Vertical, 16);
+    let cfg = ConfigManager::load_config();
 
-    // Header Card
-    let header_card = gtk4::Box::new(gtk4::Orientation::Vertical, 6);
-    header_card.add_css_class("hyprdrop-card");
-
-    let t_title = gtk4::Label::new(Some("Curated Wayland Color Themes"));
-    t_title.add_css_class("hyprdrop-title");
-    t_title.set_halign(gtk4::Align::Start);
-    header_card.append(&t_title);
-
-    let t_desc = gtk4::Label::new(Some(
-        "Instantly coordinate color themes across your edge drop hotspot and radial wheel overlays.",
-    ));
-    t_desc.add_css_class("hyprdrop-page-desc");
-    t_desc.set_halign(gtk4::Align::Start);
-    header_card.append(&t_desc);
-    content_box.append(&header_card);
-
+    // Feedback Toast Label
     let feedback_lbl = gtk4::Label::new(None);
     feedback_lbl.add_css_class("badge-success");
     feedback_lbl.set_visible(false);
 
-    // Theme Preset Cards
-    for preset in THEME_PRESETS {
+    // ========================================================================
+    // PART 1: CURRENT ACTIVE THEME HERO BANNER
+    // ========================================================================
+    let active_card = gtk4::Box::new(gtk4::Orientation::Vertical, 12);
+    active_card.add_css_class("hyprdrop-card");
+    active_card.add_css_class("hyprdrop-active-theme-card");
+
+    let a_top = gtk4::Box::new(gtk4::Orientation::Horizontal, 10);
+    let a_header_col = gtk4::Box::new(gtk4::Orientation::Vertical, 2);
+    a_header_col.set_hexpand(true);
+
+    let a_small_title = gtk4::Label::new(Some("CURRENT ACTIVE THEME"));
+    a_small_title.add_css_class("hyprdrop-mono-badge");
+    a_small_title.set_halign(gtk4::Align::Start);
+    a_header_col.append(&a_small_title);
+
+    let a_theme_name = gtk4::Label::new(Some(&cfg.theme.name));
+    a_theme_name.add_css_class("hyprdrop-title");
+    a_theme_name.set_halign(gtk4::Align::Start);
+    a_header_col.append(&a_theme_name);
+
+    a_top.append(&a_header_col);
+
+    let active_swatches_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 6);
+    active_swatches_box.set_valign(gtk4::Align::Center);
+    update_active_swatches(&active_swatches_box, &cfg.theme);
+    a_top.append(&active_swatches_box);
+
+    let reset_default_btn = gtk4::Button::with_label("↺ Reset to Electric Blue (Default)");
+    reset_default_btn.add_css_class("hyprdrop-secondary");
+    reset_default_btn.add_css_class("hyprdrop-btn-sm");
+    reset_default_btn.set_valign(gtk4::Align::Center);
+    a_top.append(&reset_default_btn);
+
+    active_card.append(&a_top);
+
+    let a_desc = gtk4::Label::new(Some(
+        "This theme is applied live across all Hub menus, navigation bars, controls, dialogs, drop shelf, and edge hotspot.",
+    ));
+    a_desc.add_css_class("hyprdrop-page-desc");
+    a_desc.set_halign(gtk4::Align::Start);
+    active_card.append(&a_desc);
+
+    content_box.append(&active_card);
+    content_box.append(&feedback_lbl);
+
+    // Tracks all preset card rows so applying any theme immediately updates UI state
+    let cards_rc: Rc<RefCell<Vec<PresetCardRow>>> = Rc::new(RefCell::new(Vec::new()));
+
+    // Custom theme entry forward declarations
+    let name_entry = gtk4::Entry::new();
+    name_entry.set_text(&cfg.theme.name);
+    name_entry.set_placeholder_text(Some("My Custom Palette"));
+    name_entry.set_hexpand(true);
+
+    let p_entry_holder: Rc<RefCell<Option<gtk4::Entry>>> = Rc::new(RefCell::new(None));
+    let s_entry_holder: Rc<RefCell<Option<gtk4::Entry>>> = Rc::new(RefCell::new(None));
+    let a_entry_holder: Rc<RefCell<Option<gtk4::Entry>>> = Rc::new(RefCell::new(None));
+    let surf_entry_holder: Rc<RefCell<Option<gtk4::Entry>>> = Rc::new(RefCell::new(None));
+    let card_entry_holder: Rc<RefCell<Option<gtk4::Entry>>> = Rc::new(RefCell::new(None));
+
+    // Universal instant hot-reload dispatcher
+    let apply_theme_fn = {
+        let active_name_lbl = a_theme_name.clone();
+        let cards_rc = cards_rc.clone();
+        let swatches_box = active_swatches_box.clone();
+        let name_entry = name_entry.clone();
+        let p_holder = p_entry_holder.clone();
+        let s_holder = s_entry_holder.clone();
+        let a_holder = a_entry_holder.clone();
+        let surf_holder = surf_entry_holder.clone();
+        let card_holder = card_entry_holder.clone();
+        let fb_lbl = feedback_lbl.clone();
+
+        Rc::new(move |new_theme: AppTheme, sync_custom_inputs: bool| {
+            // 1. Hot-reload GTK CSS live across all displays and windows
+            crate::ui::apply_theme(&new_theme);
+
+            // 2. Hot-reload LayerShell edge hotspot live
+            crate::ui::hotspot::HotspotWindow::update_theme_live(
+                &new_theme.primary,
+                &new_theme.secondary,
+                &new_theme.accent,
+            );
+
+            // 3. Persist to disk
+            let mut c = ConfigManager::load_config();
+            c.hotspot_color = new_theme.primary.clone();
+            c.hotspot_hover_color = new_theme.secondary.clone();
+            c.hotspot_accent_color = new_theme.accent.clone();
+            c.theme = new_theme.clone();
+            let _ = ConfigManager::save_config(&c);
+
+            // 4. Update Active Theme Banner
+            active_name_lbl.set_text(&new_theme.name);
+            update_active_swatches(&swatches_box, &new_theme);
+
+            // 5. Optionally sync custom inputs to the chosen preset
+            if sync_custom_inputs {
+                name_entry.set_text(&new_theme.name);
+                if let Some(ref e) = *p_holder.borrow() { e.set_text(&new_theme.primary); }
+                if let Some(ref e) = *s_holder.borrow() { e.set_text(&new_theme.secondary); }
+                if let Some(ref e) = *a_holder.borrow() { e.set_text(&new_theme.accent); }
+                if let Some(ref e) = *surf_holder.borrow() { e.set_text(&new_theme.surface); }
+                if let Some(ref e) = *card_holder.borrow() { e.set_text(&new_theme.card_bg); }
+            }
+
+            // 6. Update all preset cards in the list
+            for item in cards_rc.borrow().iter() {
+                let is_cur = item.theme.name == new_theme.name
+                    || (item.theme.primary.eq_ignore_ascii_case(&new_theme.primary)
+                        && item.theme.surface.eq_ignore_ascii_case(&new_theme.surface));
+                if is_cur {
+                    item.card.add_css_class("hyprdrop-theme-card-active");
+                    item.badge.set_visible(true);
+                    item.apply_btn.set_label("Active ✓");
+                    item.apply_btn.remove_css_class("hyprdrop-secondary");
+                    item.apply_btn.add_css_class("hyprdrop-primary");
+                } else {
+                    item.card.remove_css_class("hyprdrop-theme-card-active");
+                    item.badge.set_visible(false);
+                    item.apply_btn.set_label("Apply Theme");
+                    item.apply_btn.remove_css_class("hyprdrop-primary");
+                    item.apply_btn.add_css_class("hyprdrop-secondary");
+                }
+            }
+
+            fb_lbl.set_text(&format!("✓ Applied '{}' live across all menus and hotspot!", new_theme.name));
+            fb_lbl.set_visible(true);
+        })
+    };
+
+    // Wire reset button
+    let apply_for_reset = apply_theme_fn.clone();
+    reset_default_btn.connect_clicked(move |_| {
+        apply_for_reset(AppTheme::default(), true);
+    });
+
+    // ========================================================================
+    // PART 2: 20 CURATED MASTER THEMES
+    // ========================================================================
+    let list_header = gtk4::Box::new(gtk4::Orientation::Vertical, 4);
+    list_header.set_margin_top(8);
+
+    let l_title = gtk4::Label::new(Some("⚡ 20 Curated Master Themes"));
+    l_title.add_css_class("hyprdrop-title");
+    l_title.set_halign(gtk4::Align::Start);
+    list_header.append(&l_title);
+
+    let l_desc = gtk4::Label::new(Some(
+        "Select any designer palette to instantly restyle every menu, button, modal dialog, and edge hotspot.",
+    ));
+    l_desc.add_css_class("hyprdrop-page-desc");
+    l_desc.set_halign(gtk4::Align::Start);
+    list_header.append(&l_desc);
+    content_box.append(&list_header);
+
+    for preset in ALL_THEME_PRESETS {
         let card = gtk4::Box::new(gtk4::Orientation::Horizontal, 14);
         card.add_css_class("hyprdrop-theme-card");
 
-        // Swatch Preview Pills
-        let pills_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 4);
-        pills_box.set_valign(gtk4::Align::Center);
+        let preset_theme = AppTheme {
+            name: preset.name.to_string(),
+            primary: preset.primary.to_string(),
+            secondary: preset.secondary.to_string(),
+            accent: preset.accent.to_string(),
+            surface: preset.surface.to_string(),
+            card_bg: preset.card_bg.to_string(),
+        };
 
-        for &c_class in &[preset.css_class, "swatch-white", "swatch-cyan"] {
+        let is_active = (preset.name == cfg.theme.name)
+            || (preset.primary.eq_ignore_ascii_case(&cfg.theme.primary)
+                && preset.surface.eq_ignore_ascii_case(&cfg.theme.surface));
+
+        if is_active {
+            card.add_css_class("hyprdrop-theme-card-active");
+        }
+
+        // 4-Color Swatch Preview (Primary, Secondary, Accent, Surface)
+        let swatches_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 5);
+        swatches_box.set_valign(gtk4::Align::Center);
+
+        for hex in &[preset.primary, preset.secondary, preset.accent, preset.card_bg] {
             let pill = gtk4::Label::new(None);
             pill.add_css_class("hyprdrop-theme-pill");
-            pill.add_css_class(c_class);
-            pills_box.append(&pill);
+            #[allow(deprecated)]
+            {
+                let provider = gtk4::CssProvider::new();
+                provider.load_from_string(&format!(
+                    "label {{ background-color: {}; min-width: 14px; min-height: 14px; border-radius: 9999px; border: 1px solid rgba(255,255,255,0.2); }}",
+                    hex
+                ));
+                pill.style_context().add_provider(&provider, gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION + 20);
+            }
+            swatches_box.append(&pill);
         }
-        card.append(&pills_box);
+        card.append(&swatches_box);
 
         let info_col = gtk4::Box::new(gtk4::Orientation::Vertical, 2);
         info_col.set_hexpand(true);
 
+        let name_row = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
         let name_lbl = gtk4::Label::new(Some(preset.name));
         name_lbl.add_css_class("hyprdrop-title");
         name_lbl.set_halign(gtk4::Align::Start);
-        info_col.append(&name_lbl);
+        name_row.append(&name_lbl);
+
+        let badge = gtk4::Label::new(Some("✓ ACTIVE"));
+        badge.add_css_class("badge-info");
+        badge.set_visible(is_active);
+        name_row.append(&badge);
+        info_col.append(&name_row);
 
         let desc_lbl = gtk4::Label::new(Some(preset.desc));
         desc_lbl.add_css_class("hyprdrop-page-desc");
@@ -1170,34 +1451,178 @@ fn build_themes_tab() -> gtk4::Box {
         info_col.append(&desc_lbl);
         card.append(&info_col);
 
-        let apply_btn = gtk4::Button::with_label("Apply Theme");
-        apply_btn.add_css_class("hyprdrop-secondary");
+        let apply_btn = gtk4::Button::with_label(if is_active { "Active ✓" } else { "Apply Theme" });
+        if is_active {
+            apply_btn.add_css_class("hyprdrop-primary");
+        } else {
+            apply_btn.add_css_class("hyprdrop-secondary");
+        }
         apply_btn.add_css_class("hyprdrop-btn-sm");
         apply_btn.set_valign(gtk4::Align::Center);
 
-        let b = preset.base.to_string();
-        let h = preset.hover.to_string();
-        let a = preset.accent.to_string();
-        let name = preset.name.to_string();
-        let fb = feedback_lbl.clone();
-
+        let apply_closure = apply_theme_fn.clone();
+        let target_theme = preset_theme.clone();
         apply_btn.connect_clicked(move |_| {
-            let mut cfg = ConfigManager::load_config();
-            cfg.hotspot_color = b.clone();
-            cfg.hotspot_hover_color = h.clone();
-            cfg.hotspot_accent_color = a.clone();
-            let _ = ConfigManager::save_config(&cfg);
-            let _ = IpcClient::send(&IpcMessage::ReloadHotspot);
-
-            fb.set_text(&format!("✓ Applied '{}' theme live", name));
-            fb.set_visible(true);
+            apply_closure(target_theme.clone(), true);
         });
 
         card.append(&apply_btn);
         content_box.append(&card);
+
+        cards_rc.borrow_mut().push(PresetCardRow {
+            card,
+            apply_btn,
+            badge,
+            theme: preset_theme,
+        });
     }
 
-    content_box.append(&feedback_lbl);
+    // ========================================================================
+    // PART 3: CUSTOM PALETTE STUDIO & EDITOR
+    // ========================================================================
+    let custom_card = gtk4::Box::new(gtk4::Orientation::Vertical, 14);
+    custom_card.add_css_class("hyprdrop-card");
+    custom_card.set_margin_top(12);
+
+    let c_header = gtk4::Box::new(gtk4::Orientation::Horizontal, 10);
+    let c_title_box = gtk4::Box::new(gtk4::Orientation::Vertical, 2);
+    c_title_box.set_hexpand(true);
+
+    let c_title = gtk4::Label::new(Some("🎨 Create Your Custom Palette"));
+    c_title.add_css_class("hyprdrop-title");
+    c_title.set_halign(gtk4::Align::Start);
+    c_title_box.append(&c_title);
+
+    let c_desc = gtk4::Label::new(Some(
+        "Craft your personalized color scheme. Hot-reloads live across all menus, buttons, sliders, and edge hotspot as you edit.",
+    ));
+    c_desc.add_css_class("hyprdrop-page-desc");
+    c_desc.set_halign(gtk4::Align::Start);
+    c_title_box.append(&c_desc);
+    c_header.append(&c_title_box);
+    custom_card.append(&c_header);
+
+    // Theme Name Entry Row
+    let name_row = gtk4::Box::new(gtk4::Orientation::Horizontal, 12);
+    let name_lbl = gtk4::Label::new(Some("Theme Name:"));
+    name_lbl.add_css_class("hyprdrop-title-sm");
+    name_lbl.set_size_request(160, -1);
+    name_lbl.set_halign(gtk4::Align::Start);
+    name_row.append(&name_lbl);
+    name_row.append(&name_entry);
+    custom_card.append(&name_row);
+
+    // Dynamic helper to construct theme from inputs and apply immediately
+    let live_custom_apply = {
+        let name_entry = name_entry.clone();
+        let p_holder = p_entry_holder.clone();
+        let s_holder = s_entry_holder.clone();
+        let a_holder = a_entry_holder.clone();
+        let surf_holder = surf_entry_holder.clone();
+        let card_holder = card_entry_holder.clone();
+        let apply_closure = apply_theme_fn.clone();
+
+        Rc::new(move || {
+            let t_name = name_entry.text().to_string();
+            let p = p_holder.borrow().as_ref().map(|e| e.text().to_string()).unwrap_or_else(|| "#0A84FF".into());
+            let s = s_holder.borrow().as_ref().map(|e| e.text().to_string()).unwrap_or_else(|| "#38BDF8".into());
+            let a = a_holder.borrow().as_ref().map(|e| e.text().to_string()).unwrap_or_else(|| "#0062CC".into());
+            let surf = surf_holder.borrow().as_ref().map(|e| e.text().to_string()).unwrap_or_else(|| "#0D0E12".into());
+            let c_bg = card_holder.borrow().as_ref().map(|e| e.text().to_string()).unwrap_or_else(|| "#14161F".into());
+
+            let custom = AppTheme {
+                name: if t_name.trim().is_empty() { "Custom Theme".to_string() } else { t_name },
+                primary: p,
+                secondary: s,
+                accent: a,
+                surface: surf,
+                card_bg: c_bg,
+            };
+
+            apply_closure(custom, false);
+        })
+    };
+
+    let accent_swatches = [
+        "#0A84FF", "#00D2FF", "#10B981", "#A855F7", "#F59E0B", "#EC4899", "#F8FAFC",
+    ];
+
+    // Primary Accent Color
+    let (p_row, p_entry) = create_swatch_color_row(
+        "Primary Accent Color",
+        "Active navigation borders, checked switches, and brand highlights",
+        &cfg.theme.primary,
+        &accent_swatches,
+        live_custom_apply.clone(),
+    );
+    *p_entry_holder.borrow_mut() = Some(p_entry);
+    custom_card.append(&p_row);
+
+    // Secondary Glow Color
+    let (s_row, s_entry) = create_swatch_color_row(
+        "Secondary Glow Color",
+        "Hover luminescence, primary button gradients, and focus rings",
+        &cfg.theme.secondary,
+        &accent_swatches,
+        live_custom_apply.clone(),
+    );
+    *s_entry_holder.borrow_mut() = Some(s_entry);
+    custom_card.append(&s_row);
+
+    // Active Accent Color
+    let (a_row, a_entry) = create_swatch_color_row(
+        "Active Accent Color",
+        "Pressed button backgrounds, slider tracks, and drop aura",
+        &cfg.theme.accent,
+        &accent_swatches,
+        live_custom_apply.clone(),
+    );
+    *a_entry_holder.borrow_mut() = Some(a_entry);
+    custom_card.append(&a_row);
+
+    let dark_surfaces = [
+        "#0D0E12", "#1A1B26", "#1E1E2E", "#282828", "#000000", "#071513", "#180B0B",
+    ];
+
+    // Surface Dark Background
+    let (surf_row, surf_entry) = create_swatch_color_row(
+        "Dark Surface Background",
+        "Main Hub window backdrop and drop shelf base tone",
+        &cfg.theme.surface,
+        &dark_surfaces,
+        live_custom_apply.clone(),
+    );
+    *surf_entry_holder.borrow_mut() = Some(surf_entry);
+    custom_card.append(&surf_row);
+
+    let card_surfaces = [
+        "#14161F", "#24283B", "#2A2B3D", "#3C3836", "#0F0F12", "#0E2925", "#281212",
+    ];
+
+    // Card Surface Background
+    let (card_row, card_entry) = create_swatch_color_row(
+        "Card & Panel Surface",
+        "Interactive cards, dialog panels, and settings containers",
+        &cfg.theme.card_bg,
+        &card_surfaces,
+        live_custom_apply.clone(),
+    );
+    *card_entry_holder.borrow_mut() = Some(card_entry);
+    custom_card.append(&card_row);
+
+    let custom_action_row = gtk4::Box::new(gtk4::Orientation::Horizontal, 12);
+    custom_action_row.set_margin_top(6);
+
+    let save_custom_btn = gtk4::Button::with_label("Save Custom Palette");
+    save_custom_btn.add_css_class("hyprdrop-primary");
+    let apply_on_save = live_custom_apply.clone();
+    save_custom_btn.connect_clicked(move |_| {
+        apply_on_save();
+    });
+
+    custom_action_row.append(&save_custom_btn);
+    custom_card.append(&custom_action_row);
+    content_box.append(&custom_card);
 
     scrolled.set_child(Some(&content_box));
     box_view.append(&scrolled);
@@ -1766,11 +2191,12 @@ fn create_slider_row(
     (row, scale, val_lbl)
 }
 
-fn create_swatch_color_row(
+fn create_swatch_color_row<F: Fn() + 'static>(
     title: &str,
     desc: &str,
     initial_hex: &str,
-    swatches: &[(&'static str, &'static str)],
+    swatches: &[&'static str],
+    on_change: Rc<F>,
 ) -> (gtk4::Box, gtk4::Entry) {
     let row = gtk4::Box::new(gtk4::Orientation::Horizontal, 12);
     let text_col = gtk4::Box::new(gtk4::Orientation::Vertical, 2);
@@ -1794,20 +2220,39 @@ fn create_swatch_color_row(
 
     let swatch_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 6);
     swatch_box.set_valign(gtk4::Align::Center);
-    for (hex, css_cls) in swatches {
+    for &hex in swatches {
         let btn = gtk4::Button::new();
         btn.add_css_class("hyprdrop-swatch-circle");
-        btn.add_css_class(css_cls);
         btn.set_tooltip_text(Some(hex));
+
+        #[allow(deprecated)]
+        {
+            let provider = gtk4::CssProvider::new();
+            provider.load_from_string(&format!(
+                "button {{ background: {}; background-color: {}; background-image: none; border-radius: 9999px; min-width: 22px; min-height: 22px; border: 1px solid rgba(255,255,255,0.3); }}",
+                hex, hex
+            ));
+            btn.style_context().add_provider(&provider, gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION + 40);
+        }
 
         let entry_clone = entry.clone();
         let h_str = hex.to_string();
+        let cb = on_change.clone();
         btn.connect_clicked(move |_| {
             entry_clone.set_text(&h_str);
+            cb();
         });
         swatch_box.append(&btn);
     }
     row.append(&swatch_box);
+
+    let cb_entry = on_change.clone();
+    entry.connect_changed(move |e| {
+        let text = e.text().to_string();
+        if text.starts_with('#') && (text.len() == 7 || text.len() == 9) {
+            cb_entry();
+        }
+    });
 
     (row, entry)
 }
@@ -1817,11 +2262,12 @@ fn draw_mini_monitor(
     width: f64,
     height: f64,
     cfg: &AppConfig,
+    mon_w: f64,
+    mon_h: f64,
 ) {
     use std::f64::consts::PI;
     let _ = cr.save();
 
-    // 1. Draw Monitor Bezel
     let bezel_pad_x = 18.0;
     let bezel_pad_y = 12.0;
     let bezel_w = width - bezel_pad_x * 2.0;
@@ -1850,7 +2296,7 @@ fn draw_mini_monitor(
     cr.set_source_rgba(0.0, 0.82, 1.0, 0.85);
     let _ = cr.fill();
 
-    // 2. Screen Area (Desktop interior)
+    // Screen Area (Desktop interior)
     let scr_inset = 6.0;
     let sx = bezel_pad_x + scr_inset;
     let sy = bezel_pad_y + scr_inset;
@@ -1870,7 +2316,7 @@ fn draw_mini_monitor(
     cr.set_dash(&dashes, 0.0);
     cr.set_source_rgba(0.25, 0.30, 0.42, 0.35);
     cr.set_line_width(1.0);
-    cr.rectangle(sx + 2.0, sy + 2.0, sw - 4.0, sh - 4.0);
+    cr.rectangle(sx + 1.0, sy + 1.0, sw - 2.0, sh - 2.0);
     let _ = cr.stroke();
     let _ = cr.restore();
 
@@ -1884,58 +2330,69 @@ fn draw_mini_monitor(
         let _ = cr.show_text(text);
     }
 
-    // 3. Hotspot Span & Drawing
+    // Hotspot Span & Drawing using real monitor geometry
     if cfg.hotspot_enabled {
-        let math = PerimeterMath::new(sw, sh);
+        let math = PerimeterMath::new(mon_w, mon_h);
         let s = math.t_to_s(cfg.hotspot_perimeter_pos);
-        let scaled_len = (cfg.hotspot_length as f64 / 1920.0 * (sw + sh)).clamp(28.0, 140.0);
+        let span = math.calculate_span(s, cfg.hotspot_length as f64);
+
+        let scaled_len = (cfg.hotspot_length as f64 / (mon_w + mon_h) * (sw + sh)).clamp(28.0, 140.0);
         let scaled_thick = (cfg.hotspot_thickness as f64 * 0.75).clamp(4.0, 14.0);
-        let scaled_margin = (cfg.hotspot_margin as f64 * 0.25).clamp(0.0, 8.0);
         let scaled_radius = (cfg.hotspot_corner_radius as f64 * 0.6).clamp(2.0, 6.0);
 
-        let span = math.calculate_span(s, scaled_len);
         let (r, g, b, _) = parse_hex_color(&cfg.hotspot_color, 0.95);
-        let center_coord = math.edge_center_coord(&span);
 
         match span.edge {
             ScreenEdge::Top => {
-                let rx = sx + center_coord - span.length / 2.0;
-                let ry = sy + scaled_margin;
-                draw_rounded_rectangle(cr, rx, ry, span.length, scaled_thick, scaled_radius);
+                let norm_x = (math.edge_center_coord(&span) / mon_w).clamp(0.0, 1.0);
+                let rx = (sx + norm_x * sw - scaled_len / 2.0).clamp(sx, sx + sw - scaled_len);
+                let ry = sy;
+                draw_rounded_rectangle(cr, rx, ry, scaled_len, scaled_thick, scaled_radius);
                 fill_and_glow(cr, r, g, b, cfg.hotspot_locked);
             }
             ScreenEdge::Bottom => {
-                let rx = sx + center_coord - span.length / 2.0;
-                let ry = sy + sh - scaled_margin - scaled_thick;
-                draw_rounded_rectangle(cr, rx, ry, span.length, scaled_thick, scaled_radius);
+                let norm_x = (math.edge_center_coord(&span) / mon_w).clamp(0.0, 1.0);
+                let rx = (sx + norm_x * sw - scaled_len / 2.0).clamp(sx, sx + sw - scaled_len);
+                let ry = sy + sh - scaled_thick;
+                draw_rounded_rectangle(cr, rx, ry, scaled_len, scaled_thick, scaled_radius);
                 fill_and_glow(cr, r, g, b, cfg.hotspot_locked);
             }
             ScreenEdge::Left => {
-                let rx = sx + scaled_margin;
-                let ry = sy + center_coord - span.length / 2.0;
-                draw_rounded_rectangle(cr, rx, ry, scaled_thick, span.length, scaled_radius);
+                let norm_y = (math.edge_center_coord(&span) / mon_h).clamp(0.0, 1.0);
+                let rx = sx;
+                let ry = (sy + norm_y * sh - scaled_len / 2.0).clamp(sy, sy + sh - scaled_len);
+                draw_rounded_rectangle(cr, rx, ry, scaled_thick, scaled_len, scaled_radius);
                 fill_and_glow(cr, r, g, b, cfg.hotspot_locked);
             }
             ScreenEdge::Right => {
-                let rx = sx + sw - scaled_margin - scaled_thick;
-                let ry = sy + center_coord - span.length / 2.0;
-                draw_rounded_rectangle(cr, rx, ry, scaled_thick, span.length, scaled_radius);
+                let norm_y = (math.edge_center_coord(&span) / mon_h).clamp(0.0, 1.0);
+                let rx = sx + sw - scaled_thick;
+                let ry = (sy + norm_y * sh - scaled_len / 2.0).clamp(sy, sy + sh - scaled_len);
+                draw_rounded_rectangle(cr, rx, ry, scaled_thick, scaled_len, scaled_radius);
                 fill_and_glow(cr, r, g, b, cfg.hotspot_locked);
             }
             ScreenEdge::CornerTopRight { len_top, len_right } => {
-                draw_mini_corner_l(cr, sx + sw - scaled_margin, sy + scaled_margin, len_top, len_right, scaled_thick, scaled_radius, true, false);
+                let l_top = (len_top / mon_w * sw).clamp(10.0, sw);
+                let l_right = (len_right / mon_h * sh).clamp(10.0, sh);
+                draw_mini_corner_l(cr, sx + sw, sy, l_top, l_right, scaled_thick, scaled_radius, true, false);
                 fill_and_glow(cr, r, g, b, cfg.hotspot_locked);
             }
             ScreenEdge::CornerBottomRight { len_right, len_bottom } => {
-                draw_mini_corner_l(cr, sx + sw - scaled_margin, sy + sh - scaled_margin, len_bottom, len_right, scaled_thick, scaled_radius, true, true);
+                let l_bottom = (len_bottom / mon_w * sw).clamp(10.0, sw);
+                let l_right = (len_right / mon_h * sh).clamp(10.0, sh);
+                draw_mini_corner_l(cr, sx + sw, sy + sh, l_bottom, l_right, scaled_thick, scaled_radius, true, true);
                 fill_and_glow(cr, r, g, b, cfg.hotspot_locked);
             }
             ScreenEdge::CornerBottomLeft { len_bottom, len_left } => {
-                draw_mini_corner_l(cr, sx + scaled_margin, sy + sh - scaled_margin, len_bottom, len_left, scaled_thick, scaled_radius, false, true);
+                let l_bottom = (len_bottom / mon_w * sw).clamp(10.0, sw);
+                let l_left = (len_left / mon_h * sh).clamp(10.0, sh);
+                draw_mini_corner_l(cr, sx, sy + sh, l_bottom, l_left, scaled_thick, scaled_radius, false, true);
                 fill_and_glow(cr, r, g, b, cfg.hotspot_locked);
             }
             ScreenEdge::CornerTopLeft { len_left, len_top } => {
-                draw_mini_corner_l(cr, sx + scaled_margin, sy + scaled_margin, len_top, len_left, scaled_thick, scaled_radius, false, false);
+                let l_top = (len_top / mon_w * sw).clamp(10.0, sw);
+                let l_left = (len_left / mon_h * sh).clamp(10.0, sh);
+                draw_mini_corner_l(cr, sx, sy, l_top, l_left, scaled_thick, scaled_radius, false, false);
                 fill_and_glow(cr, r, g, b, cfg.hotspot_locked);
             }
         }

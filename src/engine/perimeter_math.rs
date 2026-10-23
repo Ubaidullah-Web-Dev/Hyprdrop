@@ -130,6 +130,46 @@ impl PerimeterMath {
         }
     }
 
+    /// Dynamically calculates the normalized perimeter coordinate (t) for the top edge center.
+    pub fn snap_top_edge(&self) -> f64 {
+        self.s_to_t(self.width / 2.0)
+    }
+
+    /// Dynamically calculates the normalized perimeter coordinate (t) for the right edge center.
+    pub fn snap_right_edge(&self) -> f64 {
+        self.s_to_t(self.width + self.height / 2.0)
+    }
+
+    /// Dynamically calculates the normalized perimeter coordinate (t) for the bottom edge center.
+    pub fn snap_bottom_edge(&self) -> f64 {
+        self.s_to_t(self.width + self.height + self.width / 2.0)
+    }
+
+    /// Dynamically calculates the normalized perimeter coordinate (t) for the left edge center.
+    pub fn snap_left_edge(&self) -> f64 {
+        self.s_to_t(2.0 * self.width + self.height + self.height / 2.0)
+    }
+
+    /// Dynamically calculates the normalized perimeter coordinate (t) for the top-right corner.
+    pub fn snap_corner_top_right(&self) -> f64 {
+        self.s_to_t(self.width)
+    }
+
+    /// Dynamically calculates the normalized perimeter coordinate (t) for the bottom-right corner.
+    pub fn snap_corner_bottom_right(&self) -> f64 {
+        self.s_to_t(self.width + self.height)
+    }
+
+    /// Dynamically calculates the normalized perimeter coordinate (t) for the bottom-left corner.
+    pub fn snap_corner_bottom_left(&self) -> f64 {
+        self.s_to_t(2.0 * self.width + self.height)
+    }
+
+    /// Dynamically calculates the normalized perimeter coordinate (t) for the top-left corner.
+    pub fn snap_corner_top_left(&self) -> f64 {
+        0.0
+    }
+
     /// Calculates perimeter span and classifies whether it's on an edge or bent across a corner.
     pub fn calculate_span(&self, center_s: f64, length: f64) -> PerimeterSpan {
         let p = self.total_perimeter();

@@ -11,9 +11,11 @@ fn test_hotspot_default_config_fields() {
     assert_eq!(cfg.hotspot_margin, 0);
     assert_eq!(cfg.hotspot_corner_radius, 6);
     assert_eq!(cfg.hotspot_auto_hide, false);
-    assert_eq!(cfg.hotspot_color, "#161618");
-    assert_eq!(cfg.hotspot_hover_color, "#0A84FF");
-    assert_eq!(cfg.hotspot_accent_color, "#FF5722");
+    assert_eq!(cfg.hotspot_color, "#0A84FF");
+    assert_eq!(cfg.hotspot_hover_color, "#38BDF8");
+    assert_eq!(cfg.hotspot_accent_color, "#0062CC");
+    assert_eq!(cfg.theme.name, "Electric Blue (Default)");
+    assert_eq!(cfg.theme.primary, "#0A84FF");
 }
 
 #[test]

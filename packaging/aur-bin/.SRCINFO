@@ -1,6 +1,6 @@
 pkgbase = hyprdrop-bin
 	pkgdesc = Radial drag-and-drop file converter, quick-action studio, and drop-shelf utility for Hyprland (precompiled binary)
-	pkgver = 0.2.0
+	pkgver = 0.2.1
 	pkgrel = 1
 	url = https://github.com/Ubaidullah-Web-Dev/Hyprdrop
 	arch = x86_64
@@ -19,7 +19,7 @@ pkgbase = hyprdrop-bin
 	provides = hyprdrop
 	conflicts = hyprdrop
 	conflicts = hyprdrop-git
-	source = hyprdrop-bin-0.2.0.tar.gz::https://github.com/Ubaidullah-Web-Dev/Hyprdrop/releases/download/v0.2.0/hyprdrop-v0.2.0-linux-x86_64.tar.gz
-	sha256sums = ca278513578694e753cab35c121e75884302e97aa1177efb3d944a0fff221ebd
+	source = hyprdrop-bin-0.2.1.tar.gz::https://github.com/Ubaidullah-Web-Dev/Hyprdrop/releases/download/v0.2.1/hyprdrop-v0.2.1-linux-x86_64.tar.gz
+	sha256sums = af65860519e8bf99a4b6998702fe7780f828170538eed01eeb2d0a41d7d178bd
 
 pkgname = hyprdrop-bin
