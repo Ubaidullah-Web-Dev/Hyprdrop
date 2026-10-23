@@ -129,6 +129,28 @@ echo ""
 
 mkdir -p "${BIN_DIR}" "${APP_DIR}" "${SYSTEMD_DIR}" "${ICON_DIR}/scalable/apps"
 
+# 0. Check Required System Shared Libraries (Wayland/GTK4/Layer-Shell)
+if command -v pacman >/dev/null 2>&1; then
+    MISSING_REQUIRED=()
+    for pkg in gtk4 gtk4-layer-shell libadwaita at-spi2-core; do
+        if ! pacman -Q "$pkg" >/dev/null 2>&1; then
+            MISSING_REQUIRED+=("$pkg")
+        fi
+    done
+    if [ ${#MISSING_REQUIRED[@]} -gt 0 ]; then
+        echo "==> Missing required system libraries: ${MISSING_REQUIRED[*]}"
+        echo "==> Installing missing packages using pacman..."
+        if [ "${EUID:-$(id -u)}" -eq 0 ]; then
+            pacman -S --needed --noconfirm "${MISSING_REQUIRED[@]}" || true
+        elif sudo -n true 2>/dev/null || [ -t 0 ] || [ -c /dev/tty ]; then
+            sudo pacman -S --needed "${MISSING_REQUIRED[@]}" || true
+        else
+            echo "    [!] Warning: Could not acquire sudo to install ${MISSING_REQUIRED[*]} automatically."
+            echo "    Please run manually: sudo pacman -S --needed ${MISSING_REQUIRED[*]}"
+        fi
+    fi
+fi
+
 # 1. Prepare binaries (Precompiled download vs local compilation)
 if [ "$BUILD_RELEASE" = true ] && ! command -v cargo >/dev/null 2>&1 && [ ! -f "target/release/hyprdrop" ]; then
     echo "==> Cargo (Rust) is not installed. Switching to precompiled release binary..."
@@ -232,7 +254,11 @@ systemctl --user enable --now hyprdrop.service || true
 
 echo ""
 echo "==> Configuring Hyprland window rules, layer rules, and Shift+Click bind..."
-"${BIN_DIR}/hyprdrop" setup || true
+if ! "${BIN_DIR}/hyprdrop" setup; then
+    echo "    [!] Could not execute 'hyprdrop setup' automatically."
+    echo "    If you encountered a missing library error, install required packages:"
+    echo "      sudo pacman -S --needed gtk4 gtk4-layer-shell libadwaita at-spi2-core"
+fi
 
 echo ""
 echo "=========================================================="

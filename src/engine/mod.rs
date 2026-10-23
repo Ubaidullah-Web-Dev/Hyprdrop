@@ -49,7 +49,7 @@ impl FileCategory {
             _ => {
                 // If filename has multi-extension like .tar.gz
                 let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("").to_lowercase();
-                if name.ends_with(".tar.gz") || name.ends_with(".tar.zst") {
+                if name.ends_with(".tar.gz") || name.ends_with(".tar.zst") || name.ends_with(".tar.xz") || name.ends_with(".tar.bz2") {
                     Self::Archive
                 } else {
                     Self::Other
@@ -65,23 +65,33 @@ pub fn get_conversion_slices(category: FileCategory) -> &'static [&'static str] 
         FileCategory::DocumentPdf => &["DOCX", "JPG", "PNG", "TXT", "MD", "HTML", "PDF"],
         FileCategory::Image => &["PNG", "JPG", "WEBP", "AVIF", "TIFF", "BMP", "ICO", "PDF"],
         FileCategory::AudioVideo => &["MP4", "WEBM", "GIF", "MP3", "WAV", "FLAC", "OPUS"],
-        FileCategory::Archive => &["EXTRACT HERE", "ZIP", "TAR.ZST", "TAR.GZ"],
+        FileCategory::Archive => &["ZIP", "TAR.GZ", "TAR.ZST", "TAR.XZ", "7Z", "TAR"],
         FileCategory::Other => &["ZIP", "TAR.ZST", "TAR.GZ", "HEX VIEW"],
     }
 }
 
 /// Returns quick-action slices for Mode 2.
-pub fn get_quick_action_slices(_category: FileCategory) -> &'static [&'static str] {
-    &[
-        "CROP",
-        "ADD BG",
-        "COMPRESS",
-        "REDACT",
-        "AUTO TRIM",
-        "METADATA",
-        "EDIT",
-        "OCR / COPY",
-    ]
+pub fn get_quick_action_slices(category: FileCategory) -> &'static [&'static str] {
+    match category {
+        FileCategory::Archive => &[
+            "EXTRACT HERE",
+            "EXTRACT TO...",
+            "LIST FILES",
+            "TEST ARCHIVE",
+            "COMPRESS",
+            "METADATA",
+        ],
+        _ => &[
+            "CROP",
+            "ADD BG",
+            "COMPRESS",
+            "REDACT",
+            "AUTO TRIM",
+            "METADATA",
+            "EDIT",
+            "OCR / COPY",
+        ],
+    }
 }
 
 /// Formats a byte size into clean human-readable text (e.g. `410 KB`, `1.2 MB`).
@@ -133,19 +143,10 @@ pub fn execute_conversion(source_path: &Path, target_slice: &str) -> Result<Path
                     extract_archive(source_path, &dest)?;
                     Ok(dest)
                 }
-                "ZIP" => {
-                    let out = get_converted_output_path(source_path, "zip");
-                    create_zip(source_path, &out)?;
-                    Ok(out)
-                }
-                "TAR.ZST" => {
-                    let out = get_converted_output_path(source_path, "tar.zst");
-                    create_tar_zst(source_path, &out)?;
-                    Ok(out)
-                }
-                "TAR.GZ" => {
-                    let out = get_converted_output_path(source_path, "tar.gz");
-                    create_tar_gz(source_path, &out)?;
+                "ZIP" | "TAR.GZ" | "TAR.ZST" | "TAR.XZ" | "7Z" | "TAR" => {
+                    let ext = target_slice.to_lowercase();
+                    let out = get_converted_output_path(source_path, &ext);
+                    crate::engine::archive_ops::convert_archive_format(source_path, target_slice, &out)?;
                     Ok(out)
                 }
                 other => Err(anyhow!("Unknown archive slice action: {}", other)),

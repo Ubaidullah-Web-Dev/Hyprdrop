@@ -15,7 +15,7 @@ use crate::engine::{
 use crate::hyprland::layer_shell::configure_fullscreen_layer_shell_overlay;
 use crate::ui::drop_shelf::DropShelf;
 use crate::ui::modals::{
-    open_add_bg_modal, open_crop_modal, open_metadata_modal, open_quick_edit_modal,
+    open_add_bg_modal, open_archive_view_modal, open_crop_modal, open_metadata_modal, open_quick_edit_modal,
     open_redact_annotate_modal,
 };
 use crate::ui::radial_menu::{
@@ -124,8 +124,13 @@ impl OverlayWindow {
 
             match hit {
                 HitZone::CenterHub => {
+                    let files = s.current_files.clone();
                     drop(s);
-                    radial_click.toggle_mode();
+                    if files.is_empty() {
+                        prompt_file_for_hub(&win_click, &radial_click);
+                    } else {
+                        radial_click.toggle_mode();
+                    }
                 }
                 HitZone::Slice(idx) => {
                     if idx < slices.len() {
@@ -148,6 +153,15 @@ impl OverlayWindow {
                                 &win_click,
                                 &app_click,
                                 &files,
+                                slice_name,
+                                current_mode,
+                            );
+                        } else {
+                            // File not preloaded: prompt user to pick file for this slice!
+                            prompt_file_for_slice(
+                                &win_click,
+                                &app_click,
+                                &radial_click,
                                 slice_name,
                                 current_mode,
                             );
@@ -684,6 +698,104 @@ fn handle_slice_activation(
                         });
                     });
                 }
+                "EXTRACT HERE" => {
+                    let src = first_file.clone();
+                    window.close();
+                    std::thread::spawn(move || {
+                        let parent = src.parent().unwrap_or_else(|| std::path::Path::new("."));
+                        let stem = src.file_stem().and_then(|s| s.to_str()).unwrap_or("extracted");
+                        let dest = parent.join(stem);
+                        let _ = std::fs::create_dir_all(&dest);
+                        if let Ok(extracted) = crate::engine::archive_ops::extract_archive(&src, &dest) {
+                            let _ = ConfigManager::append_history("EXTRACT ARCHIVE", &src, &extracted, None);
+                            let _ = std::process::Command::new("notify-send")
+                                .args([
+                                    "-a", "Hyprdrop",
+                                    "-i", "package-x-generic-symbolic",
+                                    "Archive Extracted",
+                                    &format!("Extracted to {}", extracted.display()),
+                                ])
+                                .spawn();
+                            glib::idle_add_once(move || {
+                                DropShelf::spawn(extracted, Some("Extracted".to_string()), move |chained_file| {
+                                    if let Some(active_app) = gio::Application::default()
+                                        .and_then(|a| a.downcast::<gtk4::Application>().ok()) {
+                                        OverlayWindow::spawn(&active_app, Some(chained_file));
+                                    }
+                                });
+                            });
+                        }
+                    });
+                }
+                "EXTRACT TO..." => {
+                    let src = first_file.clone();
+                    window.close();
+                    let dialog = gtk4::FileDialog::builder()
+                        .title(format!("Extract {} to...", src.file_name().and_then(|n| n.to_str()).unwrap_or("Archive")))
+                        .modal(true)
+                        .build();
+                    dialog.select_folder(gtk4::Window::NONE, gio::Cancellable::NONE, move |res| {
+                        if let Ok(folder) = res {
+                            if let Some(dest_dir) = folder.path() {
+                                let src_bg = src.clone();
+                                std::thread::spawn(move || {
+                                    if let Ok(extracted) = crate::engine::archive_ops::extract_archive(&src_bg, &dest_dir) {
+                                        let _ = ConfigManager::append_history("EXTRACT ARCHIVE", &src_bg, &extracted, None);
+                                        let _ = std::process::Command::new("notify-send")
+                                            .args([
+                                                "-a", "Hyprdrop",
+                                                "-i", "package-x-generic-symbolic",
+                                                "Archive Extracted",
+                                                &format!("Extracted to {}", extracted.display()),
+                                            ])
+                                            .spawn();
+                                        glib::idle_add_once(move || {
+                                            DropShelf::spawn(extracted, Some("Extracted".to_string()), move |chained_file| {
+                                                if let Some(active_app) = gio::Application::default()
+                                                    .and_then(|a| a.downcast::<gtk4::Application>().ok()) {
+                                                    OverlayWindow::spawn(&active_app, Some(chained_file));
+                                                }
+                                            });
+                                        });
+                                    }
+                                });
+                            }
+                        }
+                    });
+                }
+                "LIST FILES" => {
+                    let file = first_file.clone();
+                    window.close();
+                    open_archive_view_modal(Some(app), &file);
+                }
+                "TEST ARCHIVE" => {
+                    let src = first_file.clone();
+                    window.close();
+                    std::thread::spawn(move || {
+                        match crate::engine::archive_ops::test_archive_integrity(&src) {
+                            Ok((count, bytes)) => {
+                                let _ = std::process::Command::new("notify-send")
+                                    .args([
+                                        "-a", "Hyprdrop",
+                                        "-i", "emblem-ok-symbolic",
+                                        "Archive Test Passed",
+                                        &format!("Verified {} entries ({}) without errors", count, crate::engine::format_file_size(bytes)),
+                                    ])
+                                    .spawn();
+                            }
+                            Err(e) => {
+                                let _ = std::process::Command::new("notify-send")
+                                    .args([
+                                        "-a", "Hyprdrop",
+                                        "-i", "dialog-error-symbolic",
+                                        "Archive Test Failed",
+                                        &format!("Errors detected: {}", e),
+                                    ])
+                                    .spawn();
+                            }
+                        }
+                    });
+                }
                 "OCR / COPY" => {
                     window.close();
                     let src = first_file.clone();
@@ -713,4 +825,50 @@ fn handle_slice_activation(
             }
         }
     }
+}
+
+fn prompt_file_for_slice(
+    window: &gtk4::ApplicationWindow,
+    app: &gtk4::Application,
+    radial: &Rc<RadialMenu>,
+    slice_name: &'static str,
+    mode: RadialMode,
+) {
+    let dialog = gtk4::FileDialog::builder()
+        .title(format!("Select File to {}", slice_name))
+        .modal(true)
+        .build();
+
+    let win_clone = window.clone();
+    let app_clone = app.clone();
+    let radial_clone = radial.clone();
+
+    dialog.open(Some(window), gio::Cancellable::NONE, move |res| {
+        if let Ok(file) = res {
+            if let Some(path) = file.path() {
+                radial_clone.set_files(vec![path.clone()]);
+                handle_slice_activation(&win_clone, &app_clone, &[path], slice_name, mode);
+            }
+        }
+    });
+}
+
+fn prompt_file_for_hub(
+    window: &gtk4::ApplicationWindow,
+    radial: &Rc<RadialMenu>,
+) {
+    let dialog = gtk4::FileDialog::builder()
+        .title("Select File for Hyprdrop")
+        .modal(true)
+        .build();
+
+    let radial_clone = radial.clone();
+
+    dialog.open(Some(window), gio::Cancellable::NONE, move |res| {
+        if let Ok(file) = res {
+            if let Some(path) = file.path() {
+                radial_clone.set_files(vec![path]);
+            }
+        }
+    });
 }

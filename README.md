@@ -60,11 +60,15 @@ Releasing a file onto any radial slice initiates instant background conversion, 
 | **Raster & Vector Images** | `PNG`, `JPG`, `WEBP`, `AVIF`, `TIFF`, `BMP`, `ICO`, `PDF` |
 | **Documents & PDFs** | `DOCX`, `PDF`, `JPG`, `PNG`, `TXT`, `MD`, `HTML` |
 | **Audio & Video** | `MP4`, `WEBM`, `GIF` (Lanczos palettegen two-pass), `MP3`, `WAV`, `FLAC`, `OPUS` |
-| **Archives & Bundles** | `EXTRACT HERE`, `ZIP`, `TAR.ZST`, `TAR.GZ` |
+| **Archives & Packages** | `ZIP`, `TAR.GZ`, `TAR.ZST`, `TAR.XZ`, `7Z`, `TAR` |
 
 ---
 
 ### 🎨 Mode 2 — Quick-Action Studio Suite
+
+Mode 2 adapts dynamically based on what you drop:
+
+#### 🖼️ Image & Document Studio
 * ✂️ **`CROP`**: Interactive crop modal with high-visibility boundary box, 8 draggable handles, dark mask, rule-of-thirds gridlines, and aspect ratio presets (`Free`, `1:1`, `16:9`, `4:3`, `3:2`, `9:16`).
 * 🌄 **`ADD BG`**: Studio backdrop generator featuring a compact live preview, **33 curated aesthetic gradients and solids**, with real-time sliders for `Padding` (0–300 px), `Corners` (0–150 px), and `Shadow` (0.00–1.00 Gaussian blur).
 * 🗜️ **`COMPRESS`**: Lossless and perceptual compression for images, PDFs, and video clips with toast notifications showing exact space saved.
@@ -72,6 +76,13 @@ Releasing a file onto any radial slice initiates instant background conversion, 
 * 🔍 **`METADATA`**: Full EXIF, GPS, and PDF metadata inspector with 1-click `Strip All Metadata` sanitization.
 * 🔄 **`EDIT`**: Rapid rotation (90°, 180°, 270°), flip horizontal/vertical, brightness and contrast tuning, and transparent border trimming.
 * 📋 **`OCR / COPY`**: Optical text recognition via `tesseract` or direct file/image copying to the Wayland clipboard via `wl-copy`.
+
+#### 📦 Archive Studio (for `.zip`, `.tar.gz`, `.tar.zst`, `.tar.xz`, `.7z`)
+* 📂 **`EXTRACT HERE`**: Unpacks archive into a clean directory alongside the source archive.
+* 📁 **`EXTRACT TO...`**: Opens a native folder chooser dialog to extract files directly to any directory.
+* 📜 **`LIST FILES`**: Opens an interactive archive inspector modal displaying all files, folder hierarchies, uncompressed byte sizes, and instant search filter.
+* 🧪 **`TEST ARCHIVE`**: Verifies CRC and decompression stream integrity across all contained files.
+* 🗜️ **`COMPRESS`**: Re-compresses archive into maximum-efficiency `.tar.zst` or optimized container.
 
 ---
 
@@ -84,7 +95,15 @@ Immediately following any conversion or studio edit, Hyprdrop displays a compact
 
 ## 📦 Installation
 
-Hyprdrop offers multiple installation options tailored for both quick setup and system customization:
+### Prerequisites (Arch Linux / Hyprland)
+
+Ensure standard Wayland, GTK4, and layer shell runtime libraries are installed:
+
+```bash
+sudo pacman -S --needed gtk4 gtk4-layer-shell libadwaita at-spi2-core
+```
+
+---
 
 ### Method 1: Instant 1-Liner (Precompiled Binary — Recommended)
 

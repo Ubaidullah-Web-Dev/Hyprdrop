@@ -221,3 +221,42 @@ fn test_format_conversion_already_in_format() {
     assert!(webm_ok);
     assert!(reason_webm.is_none());
 }
+
+#[test]
+fn test_archive_slices_and_support() {
+    use hyprdrop::engine::{get_conversion_slices, get_quick_action_slices};
+
+    let cat = FileCategory::Archive;
+    let mode1_slices = get_conversion_slices(cat);
+    assert!(mode1_slices.contains(&"ZIP"));
+    assert!(mode1_slices.contains(&"TAR.GZ"));
+    assert!(mode1_slices.contains(&"TAR.ZST"));
+
+    let mode2_slices = get_quick_action_slices(cat);
+    assert_eq!(
+        mode2_slices,
+        &[
+            "EXTRACT HERE",
+            "EXTRACT TO...",
+            "LIST FILES",
+            "TEST ARCHIVE",
+            "COMPRESS",
+            "METADATA",
+        ]
+    );
+
+    // If source is .zip, ZIP is disabled with Already In Format
+    let (zip_ok, reason_zip) = get_slice_support_status(cat, RadialMode::FormatConversion, "ZIP", Some("zip"));
+    assert!(!zip_ok);
+    assert_eq!(reason_zip, Some("Already In Format"));
+
+    // TAR.GZ should be enabled
+    let (targz_ok, _) = get_slice_support_status(cat, RadialMode::FormatConversion, "TAR.GZ", Some("zip"));
+    assert!(targz_ok);
+
+    // In Mode 2, archive actions should all be enabled
+    for act in mode2_slices {
+        let (ok, _) = get_slice_support_status(cat, RadialMode::QuickActions, act, Some("zip"));
+        assert!(ok, "Action {} should be enabled for archives", act);
+    }
+}

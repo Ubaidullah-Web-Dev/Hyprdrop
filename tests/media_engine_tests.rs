@@ -204,3 +204,50 @@ fn test_execute_conversion_batch_parallel() {
     }
 }
 
+#[test]
+fn test_archive_conversion_inspection_and_integrity() {
+    use hyprdrop::engine::archive_ops::{
+        convert_archive_format, create_zip, list_archive_entries, test_archive_integrity,
+    };
+    use hyprdrop::engine::execute_conversion;
+
+    let dir = tempdir().expect("Failed to create tempdir");
+    let content_dir = dir.path().join("source_files");
+    fs::create_dir_all(&content_dir).expect("Failed to create dir");
+
+    fs::write(content_dir.join("hello.txt"), "Hello, Wayland!").expect("write");
+    fs::write(content_dir.join("sub.md"), "# Heading\nSubcontent").expect("write");
+
+    let zip_file = dir.path().join("test_archive.zip");
+    create_zip(&content_dir, &zip_file).expect("create zip");
+    assert!(zip_file.exists());
+
+    // 1. List entries
+    let entries = list_archive_entries(&zip_file).expect("list entries");
+    assert!(entries.iter().any(|e| e.path.contains("hello.txt")));
+    assert!(entries.iter().any(|e| e.path.contains("sub.md")));
+
+    // 2. Test integrity
+    let (count, bytes) = test_archive_integrity(&zip_file).expect("test integrity");
+    assert!(count >= 2);
+    assert!(bytes > 0);
+
+    // 3. Convert ZIP -> TAR.GZ
+    let targz_file = dir.path().join("converted.tar.gz");
+    convert_archive_format(&zip_file, "TAR.GZ", &targz_file).expect("convert to tar.gz");
+    assert!(targz_file.exists());
+    let gz_entries = list_archive_entries(&targz_file).expect("list gz entries");
+    assert!(gz_entries.iter().any(|e| e.path.contains("hello.txt")));
+
+    // 4. Convert TAR.GZ -> TAR.ZST
+    let tarzst_file = dir.path().join("converted.tar.zst");
+    convert_archive_format(&targz_file, "TAR.ZST", &tarzst_file).expect("convert to tar.zst");
+    assert!(tarzst_file.exists());
+
+    // 5. Test execute_conversion pipeline
+    let out = execute_conversion(&zip_file, "TAR.GZ").expect("execute conversion");
+    assert!(out.exists());
+    assert!(out.to_string_lossy().ends_with(".tar.gz"));
+}
+
+

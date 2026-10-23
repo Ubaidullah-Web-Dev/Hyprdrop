@@ -41,6 +41,9 @@ pub fn get_slice_support_status(
                     || (norm_ext == "JPEG" && norm_slice == "JPG")
                     || (norm_ext == "JPG" && norm_slice == "JPEG")
                     || (norm_ext == "TIFF" && norm_slice == "TIF")
+                    || (norm_ext == "TGZ" && norm_slice == "TAR.GZ")
+                    || (norm_ext == "TZST" && norm_slice == "TAR.ZST")
+                    || (norm_ext == "TXZ" && norm_slice == "TAR.XZ")
                 {
                     return (false, Some("Already In Format"));
                 }
@@ -49,6 +52,10 @@ pub fn get_slice_support_status(
         }
         RadialMode::QuickActions => {
             match slice_label {
+                "EXTRACT HERE" | "EXTRACT TO..." | "LIST FILES" | "TEST ARCHIVE" => match category {
+                    FileCategory::Archive => (true, None),
+                    _ => (false, Some("Archives only")),
+                },
                 "CROP" => match category {
                     FileCategory::Image => (true, None),
                     FileCategory::AudioVideo => (false, Some("Unavailable for Video")),
@@ -60,8 +67,7 @@ pub fn get_slice_support_status(
                     _ => (false, Some("Images only")),
                 },
                 "COMPRESS" => match category {
-                    FileCategory::Image | FileCategory::AudioVideo | FileCategory::DocumentPdf => (true, None),
-                    FileCategory::Archive => (false, Some("Already Compressed")),
+                    FileCategory::Image | FileCategory::AudioVideo | FileCategory::DocumentPdf | FileCategory::Archive => (true, None),
                     _ => (false, Some("Unsupported")),
                 },
                 "REDACT" => match category {
@@ -477,7 +483,7 @@ impl RadialMenu {
             _ => {
                 // Default center: File size, Multiple files count, or Drop prompt
                 let (main_text, sub_override) = match state.current_files.len() {
-                    0 => ("HYPRDROP".to_string(), Some("DROP FILE".to_string())),
+                    0 => ("PICK FILE".to_string(), Some("DROP OR CLICK".to_string())),
                     1 => {
                         let path = &state.current_files[0];
                         let sz = match std::fs::metadata(path) {
