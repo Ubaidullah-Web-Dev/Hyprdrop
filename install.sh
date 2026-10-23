@@ -248,9 +248,10 @@ if [ ${#MISSING_OPT[@]} -gt 0 ]; then
 fi
 
 echo ""
-echo "==> Enabling hyprdrop user service (daemon):"
+echo "==> Enabling and starting hyprdrop user service (daemon):"
 systemctl --user daemon-reload || true
-systemctl --user enable --now hyprdrop.service || true
+systemctl --user enable hyprdrop.service || true
+systemctl --user restart hyprdrop.service || true
 
 echo ""
 echo "==> Configuring Hyprland window rules, layer rules, and Shift+Click bind..."

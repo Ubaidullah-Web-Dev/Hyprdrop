@@ -132,7 +132,8 @@ pub fn execute_conversion(source_path: &Path, target_slice: &str) -> Result<Path
         }
         FileCategory::Archive => {
             let parent = source_path.parent().unwrap_or_else(|| Path::new("."));
-            match target_slice {
+            let target_upper = target_slice.to_uppercase();
+            match target_upper.as_str() {
                 "EXTRACT HERE" => {
                     let stem = source_path
                         .file_stem()
@@ -143,28 +144,29 @@ pub fn execute_conversion(source_path: &Path, target_slice: &str) -> Result<Path
                     extract_archive(source_path, &dest)?;
                     Ok(dest)
                 }
-                "ZIP" | "TAR.GZ" | "TAR.ZST" | "TAR.XZ" | "7Z" | "TAR" => {
+                "ZIP" | "TAR.GZ" | "TAR.ZST" | "TAR.XZ" | "7Z" | "TAR" | "TGZ" | "TZST" | "TXZ" => {
                     let ext = target_slice.to_lowercase();
                     let out = get_converted_output_path(source_path, &ext);
-                    crate::engine::archive_ops::convert_archive_format(source_path, target_slice, &out)?;
+                    crate::engine::archive_ops::convert_archive_format(source_path, &target_upper, &out)?;
                     Ok(out)
                 }
                 other => Err(anyhow!("Unknown archive slice action: {}", other)),
             }
         }
         FileCategory::Other => {
-            match target_slice {
+            let target_upper = target_slice.to_uppercase();
+            match target_upper.as_str() {
                 "ZIP" => {
                     let out = get_converted_output_path(source_path, "zip");
                     create_zip(source_path, &out)?;
                     Ok(out)
                 }
-                "TAR.ZST" => {
+                "TAR.ZST" | "TZST" => {
                     let out = get_converted_output_path(source_path, "tar.zst");
                     create_tar_zst(source_path, &out)?;
                     Ok(out)
                 }
-                "TAR.GZ" => {
+                "TAR.GZ" | "TGZ" => {
                     let out = get_converted_output_path(source_path, "tar.gz");
                     create_tar_gz(source_path, &out)?;
                     Ok(out)

@@ -291,9 +291,15 @@ impl RadialMenu {
             .and_then(|p| p.extension())
             .and_then(|e| e.to_str());
 
+        let is_empty = state.current_files.is_empty();
+
         // Render Slices (Modern macOS Island Sectors with Rounded Corners & Pop-Out Hover)
         for (i, &slice_label) in slices.iter().enumerate() {
-            let (is_enabled, _) = get_slice_support_status(state.file_category, state.mode, slice_label, ext);
+            let (is_enabled, _) = if is_empty {
+                (true, None)
+            } else {
+                get_slice_support_status(state.file_category, state.mode, slice_label, ext)
+            };
 
             let start_angle = -PI / 2.0 + (i as f64) * slice_angle;
             let end_angle = start_angle + slice_angle;
@@ -414,7 +420,11 @@ impl RadialMenu {
         match state.hovered_zone {
             HitZone::Slice(idx) if idx < slices.len() => {
                 let hover_text = slices[idx];
-                let (is_enabled, disabled_reason) = get_slice_support_status(state.file_category, state.mode, hover_text, ext);
+                let (is_enabled, disabled_reason) = if state.current_files.is_empty() {
+                    (true, None)
+                } else {
+                    get_slice_support_status(state.file_category, state.mode, hover_text, ext)
+                };
 
                 if is_enabled {
                     // Display hovered format or action in bright macOS Electric Blue
@@ -436,9 +446,13 @@ impl RadialMenu {
                     cr.select_font_face("Monospace", FontSlant::Normal, FontWeight::Normal);
                     cr.set_font_size(9.0);
                     cr.set_source_rgb(0.60, 0.60, 0.66);
-                    let sub = match state.mode {
-                        RadialMode::FormatConversion => "CONVERT",
-                        RadialMode::QuickActions => "ACTION",
+                    let sub = if state.current_files.is_empty() {
+                        "SELECT FILE"
+                    } else {
+                        match state.mode {
+                            RadialMode::FormatConversion => "CONVERT",
+                            RadialMode::QuickActions => "ACTION",
+                        }
                     };
                     if let Ok(ext) = cr.text_extents(sub) {
                         cr.new_sub_path();

@@ -127,7 +127,7 @@ impl OverlayWindow {
                     let files = s.current_files.clone();
                     drop(s);
                     if files.is_empty() {
-                        prompt_file_for_hub(&win_click, &radial_click);
+                        prompt_file_for_hub(&win_click, &app_click, &radial_click);
                     } else {
                         radial_click.toggle_mode();
                     }
@@ -135,10 +135,15 @@ impl OverlayWindow {
                 HitZone::Slice(idx) => {
                     if idx < slices.len() {
                         let slice_name = slices[idx];
+                        let is_empty = s.current_files.is_empty();
                         let ext = s.current_files.first()
                             .and_then(|p| p.extension())
                             .and_then(|e| e.to_str());
-                        let (is_enabled, _) = get_slice_support_status(s.file_category, s.mode, slice_name, ext);
+                        let (is_enabled, _) = if is_empty {
+                            (true, None)
+                        } else {
+                            get_slice_support_status(s.file_category, s.mode, slice_name, ext)
+                        };
                         if !is_enabled {
                             drop(s);
                             return;
@@ -289,10 +294,15 @@ impl OverlayWindow {
 
                     if num < slices.len() {
                         let slice_name = slices[num];
+                        let is_empty = s.current_files.is_empty();
                         let ext = s.current_files.first()
                             .and_then(|p| p.extension())
                             .and_then(|e| e.to_str());
-                        let (is_enabled, _) = get_slice_support_status(s.file_category, s.mode, slice_name, ext);
+                        let (is_enabled, _) = if is_empty {
+                            (true, None)
+                        } else {
+                            get_slice_support_status(s.file_category, s.mode, slice_name, ext)
+                        };
                         if !is_enabled {
                             drop(s);
                             return glib::Propagation::Stop;
@@ -304,6 +314,8 @@ impl OverlayWindow {
 
                         if !files.is_empty() {
                             handle_slice_activation(&win_key, &app_key, &files, slice_name, mode);
+                        } else {
+                            prompt_file_for_slice(&win_key, &app_key, &radial_key, slice_name, mode);
                         }
                     }
                     glib::Propagation::Stop
@@ -541,8 +553,19 @@ fn handle_slice_activation(
     let first_file = &files[0];
     let cat = FileCategory::from_path(first_file);
     let ext = first_file.extension().and_then(|e| e.to_str());
-    let (is_enabled, _) = get_slice_support_status(cat, mode, slice_name, ext);
+    let (is_enabled, reason) = get_slice_support_status(cat, mode, slice_name, ext);
     if !is_enabled {
+        if let Some(r) = reason {
+            let _ = std::process::Command::new("notify-send")
+                .args([
+                    "-a", "Hyprdrop",
+                    "-i", "dialog-warning-symbolic",
+                    "Action Not Supported",
+                    &format!("{}: {}", slice_name, r),
+                ])
+                .spawn();
+        }
+        OverlayWindow::spawn(app, Some(first_file.clone()));
         return;
     }
 
@@ -843,7 +866,10 @@ fn prompt_file_for_slice(
     let app_clone = app.clone();
     let radial_clone = radial.clone();
 
-    dialog.open(Some(window), gio::Cancellable::NONE, move |res| {
+    // Close the layer-shell window first so desktop portal file chooser can appear and take input cleanly
+    window.close();
+
+    dialog.open(gtk4::Window::NONE, gio::Cancellable::NONE, move |res| {
         if let Ok(file) = res {
             if let Some(path) = file.path() {
                 radial_clone.set_files(vec![path.clone()]);
@@ -855,6 +881,7 @@ fn prompt_file_for_slice(
 
 fn prompt_file_for_hub(
     window: &gtk4::ApplicationWindow,
+    app: &gtk4::Application,
     radial: &Rc<RadialMenu>,
 ) {
     let dialog = gtk4::FileDialog::builder()
@@ -862,12 +889,17 @@ fn prompt_file_for_hub(
         .modal(true)
         .build();
 
+    let app_clone = app.clone();
     let radial_clone = radial.clone();
 
-    dialog.open(Some(window), gio::Cancellable::NONE, move |res| {
+    // Close the layer-shell window first so desktop portal file chooser can appear and take input cleanly
+    window.close();
+
+    dialog.open(gtk4::Window::NONE, gio::Cancellable::NONE, move |res| {
         if let Ok(file) = res {
             if let Some(path) = file.path() {
-                radial_clone.set_files(vec![path]);
+                radial_clone.set_files(vec![path.clone()]);
+                OverlayWindow::spawn(&app_clone, Some(path));
             }
         }
     });
