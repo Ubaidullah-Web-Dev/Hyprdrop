@@ -180,7 +180,7 @@ if [ "$USE_PRECOMPILED" = true ]; then
     fi
 
     if [ "$DOWNLOADED" = false ]; then
-        FALLBACK_URL="https://github.com/Ubaidullah-Web-Dev/Hyprdrop/releases/download/v0.2.1/hyprdrop-v0.2.1-linux-x86_64.tar.gz"
+        FALLBACK_URL="https://github.com/Ubaidullah-Web-Dev/Hyprdrop/releases/download/v0.2.2/hyprdrop-v0.2.2-linux-x86_64.tar.gz"
         echo "==> Downloading from release fallback: ${FALLBACK_URL}"
         curl -fsSL "${FALLBACK_URL}" | tar -xz -C "${TEMP_EXTRACT}"
     fi

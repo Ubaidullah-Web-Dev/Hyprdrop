@@ -2,7 +2,7 @@ use std::cell::RefCell;
 use std::f64::consts::PI;
 use std::path::PathBuf;
 use std::rc::Rc;
-use gtk4::cairo::{Context, FontSlant, FontWeight, Operator};
+use gtk4::cairo::{Context, FontSlant, FontWeight};
 use gtk4::glib;
 use gtk4::prelude::*;
 use crate::engine::{FileCategory, format_file_size, get_conversion_slices, get_quick_action_slices};
@@ -266,12 +266,6 @@ impl RadialMenu {
     }
 
     fn draw_radial_menu(cr: &Context, width: f64, height: f64, state: &RadialState) {
-        // Ensure 100% transparent canvas background
-        cr.save().ok();
-        cr.set_operator(Operator::Clear);
-        let _ = cr.paint();
-        cr.restore().ok();
-
         let cx = width / 2.0;
         let cy = height / 2.0;
 

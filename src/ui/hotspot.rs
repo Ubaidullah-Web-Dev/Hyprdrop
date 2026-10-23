@@ -247,22 +247,6 @@ impl HotspotWindow {
 
         drawing_area.add_css_class("hyprdrop-hotspot-canvas");
 
-        #[allow(deprecated)]
-        {
-            let trans_prov = gtk4::CssProvider::new();
-            trans_prov.load_from_string(
-                "window, contents, decoration, widget, drawingarea, .hyprdrop-hotspot-canvas { \
-                 background-color: transparent; \
-                 background: transparent; \
-                 background-image: none; \
-                 box-shadow: none; \
-                 border: none; \
-                 }",
-            );
-            window.style_context().add_provider(&trans_prov, gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION + 50);
-            drawing_area.style_context().add_provider(&trans_prov, gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION + 50);
-        }
-
         let state_draw = state.clone();
         drawing_area.set_draw_func(move |_, cr, width, height| {
             let s = state_draw.borrow();
@@ -499,12 +483,6 @@ impl HotspotWindow {
 
     /// Draws the morphing hotspot pill or bent-corner arc with Cairo.
     fn draw_hotspot(cr: &Context, width: f64, height: f64, state: &HotspotState) {
-        // Ensure 100% transparent canvas background - clears all backbuffer pixels
-        cr.save().ok();
-        cr.set_operator(cairo::Operator::Clear);
-        let _ = cr.paint();
-        cr.restore().ok();
-
         let _ = cr.save();
 
         let math = PerimeterMath::new(state.monitor_w, state.monitor_h);

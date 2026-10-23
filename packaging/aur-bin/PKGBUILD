@@ -1,6 +1,6 @@
 # Maintainer: Ubaid <ubaidullah.web.dev@gmail.com>
 pkgname=hyprdrop-bin
-pkgver=0.2.1
+pkgver=0.2.2
 pkgrel=1
 pkgdesc="Radial drag-and-drop file converter, quick-action studio, and drop-shelf utility for Hyprland (precompiled binary)"
 arch=('x86_64')
@@ -24,7 +24,7 @@ optdepends=(
 provides=('hyprdrop')
 conflicts=('hyprdrop' 'hyprdrop-git')
 source=("${pkgname}-${pkgver}.tar.gz::https://github.com/Ubaidullah-Web-Dev/Hyprdrop/releases/download/v${pkgver}/hyprdrop-v${pkgver}-linux-x86_64.tar.gz")
-sha256sums=('af65860519e8bf99a4b6998702fe7780f828170538eed01eeb2d0a41d7d178bd')
+sha256sums=('4ee8917b1120a014470ce055e0a018f114cb3f3daff0e85a4be10375b79eff73')
 
 package() {
     install -Dm755 "${srcdir}/hyprdrop" "${pkgdir}/usr/bin/hyprdrop"

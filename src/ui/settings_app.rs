@@ -1205,7 +1205,7 @@ fn update_active_swatches(box_container: &gtk4::Box, theme: &AppTheme) {
                 "label {{ background-color: {}; min-width: 18px; min-height: 18px; border-radius: 9999px; border: 1px solid rgba(255,255,255,0.3); }}",
                 hex
             ));
-            pill.style_context().add_provider(&provider, gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION + 40);
+            pill.style_context().add_provider(&provider, gtk4::STYLE_PROVIDER_PRIORITY_USER + 50);
         }
         box_container.append(&pill);
     }
@@ -1424,7 +1424,7 @@ fn build_themes_tab() -> gtk4::Box {
                     "label {{ background-color: {}; min-width: 14px; min-height: 14px; border-radius: 9999px; border: 1px solid rgba(255,255,255,0.2); }}",
                     hex
                 ));
-                pill.style_context().add_provider(&provider, gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION + 20);
+                pill.style_context().add_provider(&provider, gtk4::STYLE_PROVIDER_PRIORITY_USER + 50);
             }
             swatches_box.append(&pill);
         }
@@ -2232,7 +2232,7 @@ fn create_swatch_color_row<F: Fn() + 'static>(
                 "button {{ background: {}; background-color: {}; background-image: none; border-radius: 9999px; min-width: 22px; min-height: 22px; border: 1px solid rgba(255,255,255,0.3); }}",
                 hex, hex
             ));
-            btn.style_context().add_provider(&provider, gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION + 40);
+            btn.style_context().add_provider(&provider, gtk4::STYLE_PROVIDER_PRIORITY_USER + 50);
         }
 
         let entry_clone = entry.clone();

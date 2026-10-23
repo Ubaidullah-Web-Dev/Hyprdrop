@@ -952,7 +952,7 @@ pub fn apply_theme(theme: &AppTheme) {
             gtk4::style_context_add_provider_for_display(
                 &display,
                 &provider,
-                gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION + 20,
+                gtk4::STYLE_PROVIDER_PRIORITY_USER + 20,
             );
             *cell.borrow_mut() = Some(provider);
         });
