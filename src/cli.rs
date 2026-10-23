@@ -4,7 +4,7 @@ use clap::{Parser, Subcommand};
 #[derive(Parser, Debug)]
 #[command(name = "hyprdrop")]
 #[command(author = "Hyprdrop Contributors")]
-#[command(version = "0.1.0")]
+#[command(version)]
 #[command(about = "Radial drag-and-drop file converter, quick editor, and drop-shelf for Hyprland")]
 pub struct Cli {
     #[arg(short, long, help = "Run as background daemon")]

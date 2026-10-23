@@ -173,8 +173,8 @@ Download the standalone tarball directly from the [GitHub Releases Page](https:/
 
 ```bash
 # Download latest release
-tar -xvf hyprdrop-v0.1.0-linux-x86_64.tar.gz
-cd hyprdrop-v0.1.0-linux-x86_64
+tar -xvf hyprdrop-v0.1.1-linux-x86_64.tar.gz
+cd hyprdrop-v0.1.1-linux-x86_64
 
 # Run automatic setup
 ./hyprdrop setup

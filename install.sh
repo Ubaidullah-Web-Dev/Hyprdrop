@@ -142,7 +142,9 @@ if command -v pacman >/dev/null 2>&1; then
         echo "==> Installing missing packages using pacman..."
         if [ "${EUID:-$(id -u)}" -eq 0 ]; then
             pacman -S --needed --noconfirm "${MISSING_REQUIRED[@]}" || true
-        elif sudo -n true 2>/dev/null || [ -t 0 ] || [ -c /dev/tty ]; then
+        elif [ -c /dev/tty ]; then
+            sudo pacman -S --needed "${MISSING_REQUIRED[@]}" < /dev/tty || true
+        elif sudo -n true 2>/dev/null; then
             sudo pacman -S --needed "${MISSING_REQUIRED[@]}" || true
         else
             echo "    [!] Warning: Could not acquire sudo to install ${MISSING_REQUIRED[*]} automatically."
@@ -160,14 +162,28 @@ fi
 
 if [ "$USE_PRECOMPILED" = true ]; then
     echo "==> Fetching latest precompiled release from GitHub..."
-    TARBALL_URL=$(curl -s https://api.github.com/repos/Ubaidullah-Web-Dev/Hyprdrop/releases/latest | grep "browser_download_url.*tar.gz" | head -n 1 | cut -d '"' -f 4)
-    if [ -z "$TARBALL_URL" ]; then
-        TARBALL_URL="https://github.com/Ubaidullah-Web-Dev/Hyprdrop/releases/download/v0.1.0/hyprdrop-v0.1.0-linux-x86_64.tar.gz"
-    fi
     TEMP_EXTRACT="$(mktemp -d)"
     trap 'rm -rf "${TEMP_EXTRACT}"' EXIT
-    echo "==> Downloading from: ${TARBALL_URL}"
-    curl -fsSL "${TARBALL_URL}" | tar -xz -C "${TEMP_EXTRACT}"
+
+    DOWNLOADED=false
+    DIRECT_URL="https://github.com/Ubaidullah-Web-Dev/Hyprdrop/releases/latest/download/hyprdrop-linux-x86_64.tar.gz"
+    echo "==> Downloading from: ${DIRECT_URL}"
+    if curl -fsSL "${DIRECT_URL}" 2>/dev/null | tar -xz -C "${TEMP_EXTRACT}" 2>/dev/null; then
+        DOWNLOADED=true
+    fi
+
+    if [ "$DOWNLOADED" = false ]; then
+        TARBALL_URL=$(curl -s https://api.github.com/repos/Ubaidullah-Web-Dev/Hyprdrop/releases/latest | grep "browser_download_url.*tar.gz" | head -n 1 | cut -d '"' -f 4 || true)
+        if [ -n "$TARBALL_URL" ] && curl -fsSL "${TARBALL_URL}" 2>/dev/null | tar -xz -C "${TEMP_EXTRACT}" 2>/dev/null; then
+            DOWNLOADED=true
+        fi
+    fi
+
+    if [ "$DOWNLOADED" = false ]; then
+        FALLBACK_URL="https://github.com/Ubaidullah-Web-Dev/Hyprdrop/releases/download/v0.1.1/hyprdrop-v0.1.1-linux-x86_64.tar.gz"
+        echo "==> Downloading from release fallback: ${FALLBACK_URL}"
+        curl -fsSL "${FALLBACK_URL}" | tar -xz -C "${TEMP_EXTRACT}"
+    fi
 
     HYPRDROP_BIN="${TEMP_EXTRACT}/hyprdrop"
     HELPER_BIN="${TEMP_EXTRACT}/hyprdrop-detect-selection"

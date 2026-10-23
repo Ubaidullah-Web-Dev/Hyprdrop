@@ -80,7 +80,7 @@ impl SettingsApp {
         brand_title.set_halign(gtk4::Align::Start);
         brand_title_row.append(&brand_title);
 
-        let brand_badge = gtk4::Label::new(Some("v0.1.0"));
+        let brand_badge = gtk4::Label::new(Some(&format!("v{}", env!("CARGO_PKG_VERSION"))));
         brand_badge.add_css_class("hyprdrop-brand-badge");
         brand_title_row.append(&brand_badge);
         brand_text_box.append(&brand_title_row);

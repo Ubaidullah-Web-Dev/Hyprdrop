@@ -1,6 +1,6 @@
 [package]
 name = "hyprdrop"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 authors = ["Hyprdrop Contributors"]
 description = "Lightweight, production-grade radial drag-and-drop file converter, studio editor, and drop-shelf for Hyprland"

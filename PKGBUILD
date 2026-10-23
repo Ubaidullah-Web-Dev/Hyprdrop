@@ -1,6 +1,6 @@
 # Maintainer: Ubaid <ubaidullah.web.dev@gmail.com>
 pkgname=hyprdrop
-pkgver=0.1.0
+pkgver=0.1.1
 pkgrel=1
 pkgdesc="Radial drag-and-drop file converter, quick-action studio, and drop-shelf utility for Hyprland"
 arch=('x86_64')
