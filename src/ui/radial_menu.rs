@@ -5,7 +5,9 @@ use std::rc::Rc;
 use gtk4::cairo::{Context, FontSlant, FontWeight};
 use gtk4::glib;
 use gtk4::prelude::*;
+use crate::config::ConfigManager;
 use crate::engine::{FileCategory, format_file_size, get_conversion_slices, get_quick_action_slices};
+use crate::ui::hotspot::parse_hex_color;
 
 pub const RADIAL_SIZE: i32 = 400;
 pub const INNER_RADIUS: f64 = 56.0;
@@ -269,6 +271,13 @@ impl RadialMenu {
         let cx = width / 2.0;
         let cy = height / 2.0;
 
+        let cfg = ConfigManager::load_config();
+        let (pri_r, pri_g, pri_b, _) = parse_hex_color(&cfg.theme.primary, 1.0);
+        let (sec_r, sec_g, sec_b, _) = parse_hex_color(&cfg.theme.secondary, 1.0);
+        let (card_r, card_g, card_b, _) = parse_hex_color(&cfg.theme.card_bg, 1.0);
+        let (surf_r, surf_g, surf_b, _) = parse_hex_color(&cfg.theme.surface, 1.0);
+        let pri_lum = 0.299 * pri_r + 0.587 * pri_g + 0.114 * pri_b;
+
         let slices = match state.mode {
             RadialMode::FormatConversion => get_conversion_slices(state.file_category),
             RadialMode::QuickActions => get_quick_action_slices(state.file_category),
@@ -287,7 +296,7 @@ impl RadialMenu {
 
         let is_empty = state.current_files.is_empty();
 
-        // Render Slices (Modern macOS Island Sectors with Rounded Corners & Pop-Out Hover)
+        // Render Slices (Modern Island Sectors with Rounded Corners & Pop-Out Dynamic Themed Hover)
         for (i, &slice_label) in slices.iter().enumerate() {
             let (is_enabled, _) = if is_empty {
                 (true, None)
@@ -343,18 +352,18 @@ impl RadialMenu {
                     let _ = cr.stroke();
                 }
             } else if is_hovered {
-                // macOS Electric Blue with subtle gradient / glow
-                cr.set_source_rgba(0.04, 0.52, 1.0, 0.96); // #0A84FF
+                // Dynamic theme primary with secondary glow stroke
+                cr.set_source_rgba(pri_r, pri_g, pri_b, 0.95);
                 let _ = cr.fill_preserve();
-                cr.set_source_rgba(0.40, 0.72, 1.0, 0.85);
-                cr.set_line_width(1.8);
+                cr.set_source_rgba(sec_r, sec_g, sec_b, 0.90);
+                cr.set_line_width(2.0);
                 let _ = cr.stroke();
             } else {
-                // Sleek macOS dark frosted card slice
-                cr.set_source_rgba(0.11, 0.11, 0.14, 0.88);
+                // Sleek themed dark frosted card slice
+                cr.set_source_rgba(card_r, card_g, card_b, 0.88);
                 let _ = cr.fill_preserve();
-                // Subtle 1px frosted border
-                cr.set_source_rgba(1.0, 1.0, 1.0, 0.10);
+                // Subtle frosted border with primary accent hint
+                cr.set_source_rgba((pri_r + 1.0) / 2.0, (pri_g + 1.0) / 2.0, (pri_b + 1.0) / 2.0, 0.15);
                 cr.set_line_width(1.0);
                 let _ = cr.stroke();
             }
@@ -371,7 +380,12 @@ impl RadialMenu {
             if !is_enabled {
                 cr.set_source_rgba(0.42, 0.44, 0.50, 0.35); // Greyed out text
             } else if is_hovered {
-                cr.set_source_rgb(1.0, 1.0, 1.0);
+                // Adaptive text contrast against primary color (light vs dark theme)
+                if pri_lum > 0.55 {
+                    cr.set_source_rgb(0.08, 0.08, 0.10);
+                } else {
+                    cr.set_source_rgb(1.0, 1.0, 1.0);
+                }
             } else {
                 cr.set_source_rgb(0.92, 0.92, 0.96);
             }
@@ -394,18 +408,18 @@ impl RadialMenu {
 
         cr.arc(cx, cy, INNER_RADIUS, 0.0, 2.0 * PI);
         if is_center_hovered {
-            cr.set_source_rgba(0.14, 0.14, 0.18, 0.98);
+            cr.set_source_rgba((surf_r + 0.06).min(1.0), (surf_g + 0.06).min(1.0), (surf_b + 0.08).min(1.0), 0.98);
         } else {
-            cr.set_source_rgba(0.08, 0.08, 0.10, 0.94);
+            cr.set_source_rgba(surf_r, surf_g, surf_b, 0.95);
         }
         let _ = cr.fill_preserve();
 
-        // Center hub border: macOS Blue if hovered, translucent rim otherwise
+        // Center hub border: Dynamic Theme Primary if hovered, subtle rim otherwise
         if is_center_hovered {
-            cr.set_source_rgba(0.04, 0.52, 1.0, 0.90);
-            cr.set_line_width(2.0);
+            cr.set_source_rgba(pri_r, pri_g, pri_b, 0.92);
+            cr.set_line_width(2.2);
         } else {
-            cr.set_source_rgba(1.0, 1.0, 1.0, 0.14);
+            cr.set_source_rgba((pri_r + 1.0) / 2.0, (pri_g + 1.0) / 2.0, (pri_b + 1.0) / 2.0, 0.20);
             cr.set_line_width(1.0);
         }
         let _ = cr.stroke();
@@ -421,11 +435,11 @@ impl RadialMenu {
                 };
 
                 if is_enabled {
-                    // Display hovered format or action in bright macOS Electric Blue
+                    // Display hovered format or action in bright dynamic theme primary
                     cr.select_font_face("Sans", FontSlant::Normal, FontWeight::Bold);
                     let fsize = if hover_text.len() > 8 { 12.0 } else { 14.0 };
                     cr.set_font_size(fsize);
-                    cr.set_source_rgb(0.18, 0.60, 1.0); // Electric Blue text
+                    cr.set_source_rgb(pri_r, pri_g, pri_b); // Dynamic Theme Primary text
 
                     if let Ok(ext) = cr.text_extents(hover_text) {
                         cr.new_sub_path();
@@ -540,7 +554,7 @@ impl RadialMenu {
                 let sub_display = sub_override.unwrap_or_else(|| mode_str.to_string());
                 cr.select_font_face("Sans", FontSlant::Normal, FontWeight::Bold);
                 cr.set_font_size(9.0);
-                cr.set_source_rgba(0.18, 0.60, 1.0, 0.90); // macOS Blue
+                cr.set_source_rgba(sec_r, sec_g, sec_b, 0.95); // Dynamic Theme Secondary text
 
                 if let Ok(ext) = cr.text_extents(&sub_display) {
                     cr.new_sub_path();

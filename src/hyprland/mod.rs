@@ -75,8 +75,8 @@ pub fn ensure_hyprland_floating_rules() {
     // Modern Lua-based dynamic window rules
     let lua_code = r#"
         if hl and hl.window_rule then
-            hl.window_rule({ name = "hyprdrop_float_class", match = { class = ".*hyprdrop.*" }, float = true, center = true })
-            hl.window_rule({ name = "hyprdrop_float_title", match = { title = ".*Hyprdrop.*" }, float = true, center = true })
+            hl.window_rule({ name = "hyprdrop_float_class", match = { class = ".*hyprdrop.*" }, float = true, center = true, size = "660 660" })
+            hl.window_rule({ name = "hyprdrop_float_title", match = { title = ".*Hyprdrop.*" }, float = true, center = true, size = "660 660" })
         end
     "#;
     let _ = Command::new("hyprctl").args(["eval", lua_code]).output();
@@ -89,10 +89,16 @@ pub fn ensure_hyprland_floating_rules() {
         .args(["keyword", "windowrulev2", "center, class:^(.*hyprdrop.*)$"])
         .output();
     let _ = Command::new("hyprctl")
+        .args(["keyword", "windowrulev2", "size 660 660, class:^(.*hyprdrop.*)$"])
+        .output();
+    let _ = Command::new("hyprctl")
         .args(["keyword", "windowrulev2", "float, title:^(.*Hyprdrop.*)$"])
         .output();
     let _ = Command::new("hyprctl")
         .args(["keyword", "windowrulev2", "center, title:^(.*Hyprdrop.*)$"])
+        .output();
+    let _ = Command::new("hyprctl")
+        .args(["keyword", "windowrulev2", "size 660 660, title:^(.*Hyprdrop.*)$"])
         .output();
 }
 

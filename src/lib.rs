@@ -5,3 +5,4 @@ pub mod engine;
 pub mod hyprland;
 pub mod ipc;
 pub mod ui;
+pub mod uninstaller;

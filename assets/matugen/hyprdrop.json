@@ -1,0 +1,8 @@
+{
+  "name": "Matugen (Material You)",
+  "primary": "{{colors.primary.default.hex}}",
+  "secondary": "{{colors.secondary.default.hex}}",
+  "accent": "{{colors.tertiary.default.hex}}",
+  "surface": "{{colors.surface.default.hex}}",
+  "card_bg": "{{colors.surface_container.default.hex}}"
+}

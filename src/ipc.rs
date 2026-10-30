@@ -17,6 +17,7 @@ pub enum IpcMessage {
     Toggle,
     Settings,
     ReloadHotspot,
+    ReloadTheme,
     Ping,
 }
 

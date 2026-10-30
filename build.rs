@@ -4,6 +4,13 @@ use std::process::Command;
 fn main() {
     println!("cargo:rerun-if-changed=c/hyprdrop-detect-selection.c");
 
+    // Ensure binaries can find libraries in ~/.local/lib and /usr/local/lib
+    println!("cargo:rustc-link-arg=-Wl,-rpath,$ORIGIN/../lib");
+    if let Ok(home) = std::env::var("HOME") {
+        println!("cargo:rustc-link-arg=-Wl,-rpath,{}/.local/lib", home);
+    }
+    println!("cargo:rustc-link-arg=-Wl,-rpath,/usr/local/lib");
+
     let out_dir = match std::env::var("OUT_DIR") {
         Ok(d) => d,
         Err(_) => return,

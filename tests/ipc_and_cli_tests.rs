@@ -46,6 +46,15 @@ fn test_cli_setup_subcommand() {
 }
 
 #[test]
+fn test_cli_reload_theme_subcommand() {
+    let cli = Cli::try_parse_from(["hyprdrop", "reload-theme"]).expect("Failed to parse reload-theme");
+    assert!(matches!(cli.command, Some(Commands::ReloadTheme)));
+
+    let cli_alias = Cli::try_parse_from(["hyprdrop", "theme-reload"]).expect("Failed to parse theme-reload");
+    assert!(matches!(cli_alias.command, Some(Commands::ReloadTheme)));
+}
+
+#[test]
 fn test_cli_direct_file_argument() {
     let cli = Cli::try_parse_from(["hyprdrop", "/home/user/document.pdf"])
         .expect("Failed to parse direct file");
@@ -77,6 +86,11 @@ fn test_ipc_message_serialization() {
     let json3 = serde_json::to_string(&msg3).expect("Failed to serialize");
     let deser3: IpcMessage = serde_json::from_str(&json3).expect("Failed to deserialize");
     assert!(matches!(deser3, IpcMessage::Settings));
+
+    let msg4 = IpcMessage::ReloadTheme;
+    let json4 = serde_json::to_string(&msg4).expect("Failed to serialize");
+    let deser4: IpcMessage = serde_json::from_str(&json4).expect("Failed to deserialize");
+    assert!(matches!(deser4, IpcMessage::ReloadTheme));
 }
 
 #[test]

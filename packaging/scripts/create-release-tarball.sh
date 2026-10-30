@@ -25,6 +25,7 @@ cp "target/release/hyprdrop-detect-selection" "${TMP_PKG}/"
 cp "assets/hyprdrop.desktop" "${TMP_PKG}/assets/"
 cp "assets/hyprdrop.svg" "${TMP_PKG}/assets/"
 cp -r "assets/icons" "${TMP_PKG}/assets/" 2>/dev/null || true
+cp -r "assets/matugen" "${TMP_PKG}/assets/" 2>/dev/null || true
 cp "assets/hyprdrop.service" "${TMP_PKG}/assets/"
 cp "README.md" "${TMP_PKG}/"
 cp "LICENSE" "${TMP_PKG}/"

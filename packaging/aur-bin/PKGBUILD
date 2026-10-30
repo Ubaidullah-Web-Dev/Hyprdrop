@@ -1,6 +1,6 @@
 # Maintainer: Ubaid <ubaidullah.web.dev@gmail.com>
 pkgname=hyprdrop-bin
-pkgver=0.2.2
+pkgver=0.2.3
 pkgrel=1
 pkgdesc="Radial drag-and-drop file converter, quick-action studio, and drop-shelf utility for Hyprland (precompiled binary)"
 arch=('x86_64')
@@ -24,7 +24,7 @@ optdepends=(
 provides=('hyprdrop')
 conflicts=('hyprdrop' 'hyprdrop-git')
 source=("${pkgname}-${pkgver}.tar.gz::https://github.com/Ubaidullah-Web-Dev/Hyprdrop/releases/download/v${pkgver}/hyprdrop-v${pkgver}-linux-x86_64.tar.gz")
-sha256sums=('4ee8917b1120a014470ce055e0a018f114cb3f3daff0e85a4be10375b79eff73')
+sha256sums=('2f256bc8bd543516f413cb8298d2765b811e83567461c86411a32401c885d9cd')
 
 package() {
     install -Dm755 "${srcdir}/hyprdrop" "${pkgdir}/usr/bin/hyprdrop"
@@ -39,6 +39,7 @@ package() {
     done
 
     install -Dm644 "${srcdir}/assets/hyprdrop.service" "${pkgdir}/usr/lib/systemd/user/hyprdrop.service"
+    install -Dm644 "${srcdir}/assets/matugen/hyprdrop.json" "${pkgdir}/usr/share/hyprdrop/matugen/hyprdrop.json"
     install -Dm644 "${srcdir}/README.md" "${pkgdir}/usr/share/doc/hyprdrop/README.md"
     install -Dm644 "${srcdir}/LICENSE" "${pkgdir}/usr/share/licenses/hyprdrop/LICENSE"
 }

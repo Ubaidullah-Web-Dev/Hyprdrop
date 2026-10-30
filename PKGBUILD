@@ -1,6 +1,6 @@
 # Maintainer: Ubaid <ubaidullah.web.dev@gmail.com>
 pkgname=hyprdrop
-pkgver=0.2.2
+pkgver=0.2.3
 pkgrel=1
 pkgdesc="Radial drag-and-drop file converter, quick-action studio, and drop-shelf utility for Hyprland"
 arch=('x86_64')
@@ -46,6 +46,7 @@ package() {
     done
 
     install -Dm644 "assets/hyprdrop.service" "$pkgdir/usr/lib/systemd/user/hyprdrop.service"
+    install -Dm644 "assets/matugen/hyprdrop.json" "$pkgdir/usr/share/hyprdrop/matugen/hyprdrop.json"
     install -Dm644 "README.md" "$pkgdir/usr/share/doc/$pkgname/README.md"
     install -Dm644 "LICENSE" "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
 }

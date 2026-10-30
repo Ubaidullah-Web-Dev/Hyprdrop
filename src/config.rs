@@ -92,6 +92,8 @@ pub struct AppConfig {
     #[serde(default = "default_hotspot_accent_color")]
     pub hotspot_accent_color: String,
     #[serde(default)]
+    pub allow_trigger_when_closed: bool,
+    #[serde(default)]
     pub theme: AppTheme,
 }
 
@@ -116,6 +118,7 @@ impl Default for AppConfig {
             hotspot_color: "#0A84FF".to_string(),
             hotspot_hover_color: "#38BDF8".to_string(),
             hotspot_accent_color: "#0062CC".to_string(),
+            allow_trigger_when_closed: false,
             theme: AppTheme::default(),
         }
     }
@@ -158,13 +161,94 @@ impl ConfigManager {
         }
     }
 
+    pub fn matugen_theme_path() -> PathBuf {
+        Self::config_dir().join("matugen.json")
+    }
+
+    pub fn load_matugen_theme() -> Option<AppTheme> {
+        // 1. Try ~/.config/hyprdrop/matugen.json
+        let p = Self::matugen_theme_path();
+        if p.exists() {
+            if let Ok(content) = fs::read_to_string(&p) {
+                if let Ok(theme) = serde_json::from_str::<AppTheme>(&content) {
+                    return Some(theme);
+                }
+            }
+        }
+
+        // 2. Try ~/.config/hyprdrop/theme.json
+        let alt = Self::config_dir().join("theme.json");
+        if alt.exists() {
+            if let Ok(content) = fs::read_to_string(&alt) {
+                if let Ok(theme) = serde_json::from_str::<AppTheme>(&content) {
+                    return Some(theme);
+                }
+            }
+        }
+
+        // 3. Fallback: Parse from system Matugen generated palettes if present
+        if let Some(home) = dirs::home_dir() {
+            let qs_colors = home.join(".local/state/quickshell/user/generated/colors.json");
+            if qs_colors.exists() {
+                if let Ok(content) = fs::read_to_string(&qs_colors) {
+                    if let Ok(v) = serde_json::from_str::<serde_json::Value>(&content) {
+                        let primary = v.get("primary").and_then(|s| s.as_str()).unwrap_or("#FFB2BC");
+                        let secondary = v.get("secondary").and_then(|s| s.as_str()).unwrap_or("#E5BDC1");
+                        let accent = v.get("tertiary").and_then(|s| s.as_str()).unwrap_or("#EABF8F");
+                        let surface = v.get("surface").or_else(|| v.get("background")).and_then(|s| s.as_str()).unwrap_or("#1A1112");
+                        let card_bg = v.get("surface_container").or_else(|| v.get("surface_variant")).and_then(|s| s.as_str()).unwrap_or("#241B1C");
+                        return Some(AppTheme {
+                            name: "Matugen (Material You)".to_string(),
+                            primary: primary.to_string(),
+                            secondary: secondary.to_string(),
+                            accent: accent.to_string(),
+                            surface: surface.to_string(),
+                            card_bg: card_bg.to_string(),
+                        });
+                    }
+                }
+            }
+
+            let dusky_tui = home.join(".config/matugen/generated/dusky_tui.json");
+            if dusky_tui.exists() {
+                if let Ok(content) = fs::read_to_string(&dusky_tui) {
+                    if let Ok(v) = serde_json::from_str::<serde_json::Value>(&content) {
+                        let primary = v.get("accent").and_then(|s| s.as_str()).unwrap_or("#FFB2BC");
+                        let secondary = v.get("warning").and_then(|s| s.as_str()).unwrap_or("#E5BDC1");
+                        let accent = v.get("success").and_then(|s| s.as_str()).unwrap_or("#EABF8F");
+                        let surface = v.get("bg").and_then(|s| s.as_str()).unwrap_or("#1A1112");
+                        return Some(AppTheme {
+                            name: "Matugen (Material You)".to_string(),
+                            primary: primary.to_string(),
+                            secondary: secondary.to_string(),
+                            accent: accent.to_string(),
+                            surface: surface.to_string(),
+                            card_bg: "#241B1C".to_string(),
+                        });
+                    }
+                }
+            }
+        }
+
+        None
+    }
+
     pub fn load_config() -> AppConfig {
         let path = Self::config_path();
-        if let Ok(content) = fs::read_to_string(&path)
-            && let Ok(cfg) = serde_json::from_str(&content) {
-                return cfg;
+        let mut cfg = if let Ok(content) = fs::read_to_string(&path)
+            && let Ok(cfg) = serde_json::from_str::<AppConfig>(&content) {
+                cfg
+            } else {
+                AppConfig::default()
+            };
+
+        // If theme is set to Matugen, dynamically refresh colors from matugen.json if available
+        if cfg.theme.name.to_lowercase().contains("matugen") {
+            if let Some(m_theme) = Self::load_matugen_theme() {
+                cfg.theme = m_theme;
             }
-        AppConfig::default()
+        }
+        cfg
     }
 
     pub fn save_config(cfg: &AppConfig) -> Result<()> {

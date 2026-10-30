@@ -57,6 +57,7 @@ package() {
     done
 
     install -Dm644 "assets/hyprdrop.service" "${pkgdir}/usr/lib/systemd/user/hyprdrop.service"
+    install -Dm644 "assets/matugen/hyprdrop.json" "${pkgdir}/usr/share/hyprdrop/matugen/hyprdrop.json"
     install -Dm644 "README.md" "${pkgdir}/usr/share/doc/hyprdrop/README.md"
     install -Dm644 "LICENSE" "${pkgdir}/usr/share/licenses/hyprdrop/LICENSE"
 }

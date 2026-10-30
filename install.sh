@@ -78,6 +78,9 @@ fi
 APP_DIR="${DATA_DIR}/applications"
 ICON_DIR="${DATA_DIR}/icons/hicolor"
 
+export PKG_CONFIG_PATH="${HOME}/.local/lib/pkgconfig:${HOME}/.local/share/pkgconfig:${PKG_CONFIG_PATH:-}"
+export LD_LIBRARY_PATH="${HOME}/.local/lib:${LD_LIBRARY_PATH:-}"
+
 # ------------------------------------------------------------------------------
 # Handle Remote Execution (e.g. curl -fsSL ... | bash)
 # ------------------------------------------------------------------------------
@@ -94,16 +97,88 @@ fi
 # Handle Uninstallation
 # ------------------------------------------------------------------------------
 if [ "$DO_UNINSTALL" = true ]; then
-    echo "==> Uninstalling Hyprdrop..."
+    echo "=========================================================="
+    echo "           Hyprdrop — Safe Uninstaller                    "
+    echo "=========================================================="
+    echo "==> Reverting Hyprdrop integrations and cleaning up files..."
+
+    # 1. Prefer executing native binary uninstaller if available for guaranteed consistency
+    if [ -x "${BIN_DIR}/hyprdrop" ]; then
+        "${BIN_DIR}/hyprdrop" uninstall -y 2>/dev/null || true
+    fi
+
+    # 2. Stop and disable systemd service
     systemctl --user stop hyprdrop.service 2>/dev/null || true
     systemctl --user disable hyprdrop.service 2>/dev/null || true
     rm -f "${SYSTEMD_DIR}/hyprdrop.service"
     systemctl --user daemon-reload 2>/dev/null || true
 
+    # 3. Clean up Matugen templates and configuration safely
+    MATUGEN_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/matugen"
+    MATUGEN_CONFIG="${MATUGEN_DIR}/config.toml"
+    rm -f "${MATUGEN_DIR}/templates/hyprdrop.json"
+    rm -f "${XDG_CONFIG_HOME:-$HOME/.config}/hyprdrop/matugen.json"
+
+    if [ -f "${MATUGEN_CONFIG}" ] && grep -q "\[templates\.hyprdrop\]" "${MATUGEN_CONFIG}"; then
+        echo "==> Reverting [templates.hyprdrop] from ${MATUGEN_CONFIG}..."
+        cp "${MATUGEN_CONFIG}" "${MATUGEN_CONFIG}.bak.$(date +%Y%m%d%H%M%S)"
+        python3 -c "
+import re
+p = '${MATUGEN_CONFIG}'
+with open(p, 'r') as f:
+    c = f.read()
+pattern = r'#\s*=+\n#\s*Hyprdrop Radial Utility.*?\n#\s*=+\n\[templates\.hyprdrop\][\s\S]*?(?=\n\[|\Z)'
+cleaned = re.sub(pattern, '', c)
+cleaned = re.sub(r'\[templates\.hyprdrop\][\s\S]*?(?=\n\[|\Z)', '', cleaned)
+with open(p, 'w') as f:
+    f.write(cleaned.strip() + '\n')
+" 2>/dev/null || true
+        echo "    [✓] Matugen configuration reverted. Backup created."
+    fi
+
+    # 4. Clean up Hyprland window rules and mouse keybinds safely
+    HYPR_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/hypr"
+    for hf in "${HYPR_DIR}/hyprland.lua" "${HYPR_DIR}/hyprland.conf"; do
+        if [ -f "$hf" ] && grep -q "hyprdrop" "$hf"; then
+            echo "==> Reverting Hyprdrop rules from $(basename "$hf")..."
+            cp "$hf" "$hf.bak.$(date +%Y%m%d%H%M%S)"
+            python3 -c "
+import re
+p = '$hf'
+with open(p, 'r') as f:
+    lines = f.readlines()
+out = []
+skip = False
+for line in lines:
+    if '--- Hyprdrop Radial Utility Configuration ---' in line:
+        skip = True
+        continue
+    if skip:
+        if line.strip().startswith(('# ---', '-- ---')) and 'Hyprdrop' not in line:
+            skip = False
+            out.append(line)
+        elif not line.strip() or 'hyprdrop' in line or line.strip() in (')', '}', '})', 'end'):
+            continue
+        elif not any(k in line for k in ('hl.', 'windowrule', 'layerrule', 'bind')):
+            skip = False
+            out.append(line)
+        continue
+    if 'hyprdrop' not in line:
+        out.append(line)
+with open(p, 'w') as f:
+    f.writelines(out)
+" 2>/dev/null || true
+            hyprctl reload 2>/dev/null || true
+            echo "    [✓] Cleaned up $(basename "$hf"). Backup created."
+        fi
+    done
+
+    # 5. Remove executables, desktop entries, icons and data
     rm -f "${BIN_DIR}/hyprdrop"
     rm -f "${BIN_DIR}/hyprdrop-detect-selection"
     rm -f "${APP_DIR}/hyprdrop.desktop"
     rm -f "${ICON_DIR}/scalable/apps/hyprdrop.svg"
+    rm -rf "${DATA_DIR}/hyprdrop"
 
     for s in 16 24 32 48 64 128 256 512; do
         rm -f "${ICON_DIR}/${s}x${s}/apps/hyprdrop.png"
@@ -116,7 +191,7 @@ if [ "$DO_UNINSTALL" = true ]; then
         gtk-update-icon-cache -q -t "${ICON_DIR}" 2>/dev/null || true
     fi
 
-    echo "==> Hyprdrop uninstalled cleanly."
+    echo "==> Hyprdrop uninstalled cleanly. All backups preserved."
     exit 0
 fi
 
@@ -242,11 +317,44 @@ if command -v gtk-update-icon-cache >/dev/null 2>&1; then
     gtk-update-icon-cache -q -t "${ICON_DIR}" || true
 fi
 
-# 5. Dependency Check
+# 5. Matugen Dynamic Theme Integration
+MATUGEN_SRC="${ASSETS_SRC}/matugen/hyprdrop.json"
+if [ -f "${MATUGEN_SRC}" ]; then
+    echo "==> Installing Matugen template..."
+    mkdir -p "${DATA_DIR}/hyprdrop/matugen"
+    install -Dm644 "${MATUGEN_SRC}" "${DATA_DIR}/hyprdrop/matugen/hyprdrop.json"
+
+    MATUGEN_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/matugen"
+    if [ -d "${MATUGEN_DIR}" ] || command -v matugen >/dev/null 2>&1; then
+        mkdir -p "${MATUGEN_DIR}/templates"
+        install -Dm644 "${MATUGEN_SRC}" "${MATUGEN_DIR}/templates/hyprdrop.json"
+
+        MATUGEN_CONFIG="${MATUGEN_DIR}/config.toml"
+        if [ -f "${MATUGEN_CONFIG}" ]; then
+            if ! grep -q "\[templates\.hyprdrop\]" "${MATUGEN_CONFIG}"; then
+                echo "==> Configuring [templates.hyprdrop] in ${MATUGEN_CONFIG}..."
+                cp "${MATUGEN_CONFIG}" "${MATUGEN_CONFIG}.bak.$(date +%Y%m%d%H%M%S)"
+                cat << 'EOF' >> "${MATUGEN_CONFIG}"
+
+# =============================================================================
+# Hyprdrop Radial Utility (Dynamic Material You Palette)
+# =============================================================================
+[templates.hyprdrop]
+input_path  = '~/.config/matugen/templates/hyprdrop.json'
+output_path = '~/.config/hyprdrop/matugen.json'
+post_hook   = 'hyprdrop reload-theme 2>/dev/null || :'
+EOF
+                echo "    [✓] Matugen template hooks registered successfully."
+            fi
+        fi
+    fi
+fi
+
+# 6. Dependency Check
 echo ""
 echo "==> Verifying system dependencies:"
 MISSING_OPT=()
-for dep in ffmpeg pdftoppm wl-copy tesseract hyprctl; do
+for dep in ffmpeg pdftoppm wl-copy tesseract hyprctl matugen; do
     if command -v "$dep" >/dev/null 2>&1; then
         echo "    [✓] $dep (found at $(command -v "$dep"))"
     else
@@ -258,7 +366,7 @@ done
 if [ ${#MISSING_OPT[@]} -gt 0 ]; then
     echo ""
     echo "    To install optional tools for OCR, video conversion, and PDF rendering:"
-    echo "      Arch Linux:   sudo pacman -S ffmpeg poppler wl-clipboard tesseract tesseract-data-eng"
+    echo "      Arch Linux:   sudo pacman -S ffmpeg poppler wl-clipboard tesseract tesseract-data-eng matugen-bin"
     echo "      Fedora:       sudo dnf install ffmpeg poppler-utils wl-clipboard tesseract"
     echo "      Ubuntu/Debian: sudo apt install ffmpeg poppler-utils wl-clipboard tesseract-ocr"
 fi

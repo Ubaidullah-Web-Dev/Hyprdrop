@@ -21,6 +21,53 @@ impl HyprdropApp {
             crate::hyprland::ensure_daemon_running();
         }
 
+        // Handle safe uninstallation CLI invocation
+        let is_uninstall = cli.uninstall
+            || matches!(cli.command, Some(Commands::Uninstall { .. }));
+
+        if is_uninstall {
+            let auto_confirm = matches!(cli.command, Some(Commands::Uninstall { yes: true }));
+            if !auto_confirm {
+                use std::io::{self, Write};
+                println!("==========================================================");
+                println!("           Hyprdrop — Safe System Uninstaller             ");
+                println!("==========================================================");
+                println!("This will safely revert all system changes made by Hyprdrop:");
+                println!("  • Revert Hyprland window rules and mouse keybinds (with backup)");
+                println!("  • Unregister Matugen theme templates from config.toml (with backup)");
+                println!("  • Remove Matugen hyprdrop template and generated theme");
+                println!("  • Disable and remove hyprdrop.service systemd user unit");
+                println!("  • Remove desktop entry and icons");
+                println!("  • Remove Hyprdrop executables from ~/.local/bin\n");
+                print!("Are you sure you want to proceed with uninstallation? [y/N]: ");
+                let _ = io::stdout().flush();
+
+                let mut input = String::new();
+                if io::stdin().read_line(&mut input).is_err() || !matches!(input.trim().to_lowercase().as_str(), "y" | "yes") {
+                    println!("==> Uninstallation cancelled. No changes were made.");
+                    return glib::ExitCode::SUCCESS;
+                }
+            }
+
+            println!("\n==> Reverting Hyprdrop integrations...");
+            match crate::uninstaller::perform_uninstall(true) {
+                Ok(report) => {
+                    for msg in report.messages {
+                        println!("    [✓] {}", msg);
+                    }
+                    println!("\n==========================================================");
+                    println!("   Hyprdrop has been uninstalled successfully!            ");
+                    println!("   All backups safely preserved in ~/.config/hypr & matugen");
+                    println!("==========================================================");
+                    return glib::ExitCode::SUCCESS;
+                }
+                Err(e) => {
+                    eprintln!("==> Error during uninstallation: {}", e);
+                    return glib::ExitCode::FAILURE;
+                }
+            }
+        }
+
         // First check if this is a client command targeting an existing daemon
         if !cli.daemon {
             let msg = if let Some(ref cmd) = cli.command {
@@ -84,6 +131,22 @@ impl HyprdropApp {
                             }
                         }
                     }
+                    Commands::ReloadTheme => {
+                        println!("==> Reloading Hyprdrop theme...");
+                        let mut cfg = crate::config::ConfigManager::load_config();
+                        if let Some(matugen_theme) = crate::config::ConfigManager::load_matugen_theme() {
+                            cfg.theme = matugen_theme;
+                            let _ = crate::config::ConfigManager::save_config(&cfg);
+                            println!("    [✓] Loaded latest Matugen Material You colors (primary: {})", cfg.theme.primary);
+                        }
+                        if let Ok(true) = IpcClient::send(&IpcMessage::ReloadTheme) {
+                            println!("    [✓] Notified running Hyprdrop daemon to apply new theme.");
+                        } else {
+                            println!("    [✓] Theme updated in configuration.");
+                        }
+                        return glib::ExitCode::SUCCESS;
+                    }
+                    Commands::Uninstall { .. } => unreachable!(),
                 }
             } else if let Some(ref f) = cli.file {
                 Some(IpcMessage::Trigger {
@@ -100,6 +163,19 @@ impl HyprdropApp {
                     // Message successfully handled by running daemon
                     return glib::ExitCode::SUCCESS;
                 }
+
+            // Daemon is not running. If this was a trigger or toggle,
+            // check user preference for whether to allow triggering when closed.
+            let is_trigger_or_toggle = matches!(
+                cli.command,
+                Some(Commands::Trigger { .. }) | Some(Commands::Toggle)
+            );
+            if is_trigger_or_toggle {
+                let cfg = crate::config::ConfigManager::load_config();
+                if !cfg.allow_trigger_when_closed {
+                    return glib::ExitCode::SUCCESS;
+                }
+            }
         }
 
         // Otherwise, initialize GTK Application
@@ -131,7 +207,7 @@ impl HyprdropApp {
                 Self::start_daemon_loop(app);
             } else if let Some(ref cmd) = cli_activate.command {
                 match cmd {
-                    Commands::Setup | Commands::Update => {
+                    Commands::Setup | Commands::Update | Commands::ReloadTheme | Commands::Uninstall { .. } => {
                         return;
                     }
                     Commands::Trigger { file } => {
@@ -186,10 +262,37 @@ impl HyprdropApp {
         let app_timer = app.clone();
         let listener_timer = listener.clone();
         let mut ticks = 0u64;
+        let mut last_matugen_mtime = None;
 
         // 30ms polling interval for ultra-low latency response
         glib::timeout_add_local(Duration::from_millis(30), move || {
             ticks = ticks.wrapping_add(1);
+            if ticks.is_multiple_of(15) {
+                // Check for Matugen palette updates (~every 450ms)
+                let m_path = crate::config::ConfigManager::matugen_theme_path();
+                if let Ok(meta) = std::fs::metadata(&m_path) {
+                    if let Ok(mtime) = meta.modified() {
+                        if let Some(prev) = last_matugen_mtime {
+                            if mtime != prev {
+                                last_matugen_mtime = Some(mtime);
+                                let cfg = crate::config::ConfigManager::load_config();
+                                if cfg.theme.name.to_lowercase().contains("matugen") {
+                                    crate::ui::init_css_theme();
+                                    let updated = crate::config::ConfigManager::load_config();
+                                    crate::ui::hotspot::HotspotWindow::update_theme_live(
+                                        &updated.theme.primary,
+                                        &updated.theme.secondary,
+                                        &updated.theme.accent,
+                                    );
+                                    println!("    [✓] Matugen wallpaper theme hot-reloaded automatically");
+                                }
+                            }
+                        } else {
+                            last_matugen_mtime = Some(mtime);
+                        }
+                    }
+                }
+            }
             if ticks.is_multiple_of(30) {
                 // Periodic fallback sync (~every 900ms) for fullscreen state
                 let is_fs = crate::hyprland::check_is_fullscreen();
@@ -221,6 +324,16 @@ impl HyprdropApp {
                     }
                     IpcMessage::ReloadHotspot => {
                         crate::ui::hotspot::HotspotWindow::reload(&app_timer);
+                    }
+                    IpcMessage::ReloadTheme => {
+                        crate::ui::init_css_theme();
+                        let cfg = crate::config::ConfigManager::load_config();
+                        crate::ui::hotspot::HotspotWindow::update_theme_live(
+                            &cfg.theme.primary,
+                            &cfg.theme.secondary,
+                            &cfg.theme.accent,
+                        );
+                        println!("    [✓] Live reloaded Hyprdrop theme in background daemon");
                     }
                     IpcMessage::Ping => {}
                 }

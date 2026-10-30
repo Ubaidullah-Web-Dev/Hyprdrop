@@ -3,6 +3,7 @@ use std::path::Path;
 use std::process::Command;
 use std::rc::Rc;
 use gtk4::prelude::*;
+use gtk4::glib;
 use gtk4::cairo::Context;
 
 use crate::config::{AppConfig, AppTheme, ConfigManager, HistoryRecord};
@@ -42,7 +43,7 @@ impl SettingsApp {
         let window = gtk4::ApplicationWindow::builder()
             .application(app)
             .title("Hyprdrop Hub")
-            .default_width(980)
+            .default_width(660)
             .default_height(660)
             .build();
 
@@ -54,6 +55,17 @@ impl SettingsApp {
             *cell.borrow_mut() = Some(win_ref);
         });
 
+        // Intercept close requests from Hyprland killactive / Super+Shift+C / window managers
+        let win_close_req = window.clone();
+        window.connect_close_request(move |_| {
+            ACTIVE_SETTINGS_WINDOW.with(|cell| {
+                *cell.borrow_mut() = None;
+            });
+            win_close_req.destroy();
+            crate::engine::trim_memory();
+            glib::Propagation::Proceed
+        });
+
         window.connect_destroy(|_| {
             ACTIVE_SETTINGS_WINDOW.with(|cell| {
                 *cell.borrow_mut() = None;
@@ -61,13 +73,30 @@ impl SettingsApp {
             crate::engine::trim_memory();
         });
 
+        // Keyboard shortcut: Escape destroys and closes the window cleanly
+        let key_controller = gtk4::EventControllerKey::new();
+        let win_esc = window.clone();
+        key_controller.connect_key_pressed(move |_, keyval, _, _| {
+            if keyval == gtk4::gdk::Key::Escape {
+                ACTIVE_SETTINGS_WINDOW.with(|cell| {
+                    *cell.borrow_mut() = None;
+                });
+                win_esc.destroy();
+                crate::engine::trim_memory();
+                glib::Propagation::Stop
+            } else {
+                glib::Propagation::Proceed
+            }
+        });
+        window.add_controller(key_controller);
+
         // Root horizontal container: Left Sidebar + Right Main Content
         let root_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
 
-        // --- LEFT SIDEBAR (240px wide) ---
+        // --- LEFT SIDEBAR (195px compact square layout) ---
         let sidebar = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
         sidebar.add_css_class("hyprdrop-sidebar");
-        sidebar.set_size_request(240, -1);
+        sidebar.set_size_request(195, -1);
 
         // Brand Header
         let brand_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 12);
@@ -228,9 +257,15 @@ impl SettingsApp {
         let close_btn = gtk4::Button::from_icon_name("window-close-symbolic");
         close_btn.add_css_class("hyprdrop-ghost");
         close_btn.add_css_class("hyprdrop-ghost-danger");
-        close_btn.set_tooltip_text(Some("Close Window"));
+        close_btn.set_tooltip_text(Some("Close Window (Esc)"));
         let win_close = window.clone();
-        close_btn.connect_clicked(move |_| win_close.close());
+        close_btn.connect_clicked(move |_| {
+            ACTIVE_SETTINGS_WINDOW.with(|cell| {
+                *cell.borrow_mut() = None;
+            });
+            win_close.destroy();
+            crate::engine::trim_memory();
+        });
         header_bar.append(&close_btn);
 
         main_col.append(&header_bar);
@@ -995,6 +1030,15 @@ const ALL_THEME_PRESETS: &[ThemePresetInfo] = &[
         card_bg: "#14161F",
     },
     ThemePresetInfo {
+        name: "Matugen (Material You)",
+        desc: "Dynamic Material You palette generated from your active desktop wallpaper via Matugen",
+        primary: "#FFB2BC",
+        secondary: "#E5BDC1",
+        accent: "#EABF8F",
+        surface: "#1A1112",
+        card_bg: "#241B1C",
+    },
+    ThemePresetInfo {
         name: "Electric Cyan",
         desc: "Signature Hyprdrop Wayland electric cyan with high luminescence",
         primary: "#00D2FF",
@@ -1371,6 +1415,68 @@ fn build_themes_tab() -> gtk4::Box {
     });
 
     // ========================================================================
+    // PART 1.5: MATUGEN MATERIAL YOU DYNAMIC WALLPAPER SYNC
+    // ========================================================================
+    let matugen_card = gtk4::Box::new(gtk4::Orientation::Vertical, 12);
+    matugen_card.add_css_class("hyprdrop-card");
+    matugen_card.add_css_class("hyprdrop-interactive-card");
+
+    let m_header = gtk4::Box::new(gtk4::Orientation::Horizontal, 12);
+    let m_text = gtk4::Box::new(gtk4::Orientation::Vertical, 4);
+    m_text.set_hexpand(true);
+
+    let m_title_row = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
+    let m_title = gtk4::Label::new(Some("🎨 Matugen Material You Dynamic Wallpaper Theming"));
+    m_title.add_css_class("hyprdrop-title");
+    m_title.set_halign(gtk4::Align::Start);
+    m_title_row.append(&m_title);
+
+    let live_matugen_opt = ConfigManager::load_matugen_theme();
+    let has_matugen = live_matugen_opt.is_some();
+    let is_matugen_active = cfg.theme.name.to_lowercase().contains("matugen");
+
+    let m_badge = gtk4::Label::new(Some(if is_matugen_active {
+        "ACTIVE DYNAMIC THEME"
+    } else if has_matugen {
+        "WALLPAPER PALETTE READY"
+    } else {
+        "TEMPLATE READY"
+    }));
+    m_badge.add_css_class(if is_matugen_active { "badge-success" } else { "badge-info" });
+    m_title_row.append(&m_badge);
+    m_text.append(&m_title_row);
+
+    let m_desc = gtk4::Label::new(Some(
+        "Hot-reloads colors from your desktop wallpaper instantly! When wallpaper changes with Matugen, Hyprdrop detects it in real-time and restyles petals, hub, hotspot, and menus automatically.",
+    ));
+    m_desc.add_css_class("hyprdrop-page-desc");
+    m_desc.set_halign(gtk4::Align::Start);
+    m_text.append(&m_desc);
+    m_header.append(&m_text);
+
+    let sync_btn = gtk4::Button::with_label("⚡ Sync Wallpaper Colors");
+    sync_btn.add_css_class(if is_matugen_active { "hyprdrop-primary" } else { "hyprdrop-secondary" });
+    sync_btn.set_valign(gtk4::Align::Center);
+
+    let apply_for_matugen = apply_theme_fn.clone();
+    let m_badge_clone = m_badge.clone();
+    let sync_btn_clone = sync_btn.clone();
+    sync_btn.connect_clicked(move |_| {
+        if let Some(live_matugen) = ConfigManager::load_matugen_theme() {
+            apply_for_matugen(live_matugen, true);
+            m_badge_clone.set_text("ACTIVE DYNAMIC THEME");
+            m_badge_clone.remove_css_class("badge-info");
+            m_badge_clone.add_css_class("badge-success");
+            sync_btn_clone.remove_css_class("hyprdrop-secondary");
+            sync_btn_clone.add_css_class("hyprdrop-primary");
+        }
+    });
+
+    m_header.append(&sync_btn);
+    matugen_card.append(&m_header);
+    content_box.append(&matugen_card);
+
+    // ========================================================================
     // PART 2: 20 CURATED MASTER THEMES
     // ========================================================================
     let list_header = gtk4::Box::new(gtk4::Orientation::Vertical, 4);
@@ -1393,7 +1499,7 @@ fn build_themes_tab() -> gtk4::Box {
         let card = gtk4::Box::new(gtk4::Orientation::Horizontal, 14);
         card.add_css_class("hyprdrop-theme-card");
 
-        let preset_theme = AppTheme {
+        let mut preset_theme = AppTheme {
             name: preset.name.to_string(),
             primary: preset.primary.to_string(),
             secondary: preset.secondary.to_string(),
@@ -1401,6 +1507,12 @@ fn build_themes_tab() -> gtk4::Box {
             surface: preset.surface.to_string(),
             card_bg: preset.card_bg.to_string(),
         };
+
+        if preset.name.contains("Matugen") {
+            if let Some(live) = ConfigManager::load_matugen_theme() {
+                preset_theme = live;
+            }
+        }
 
         let is_active = (preset.name == cfg.theme.name)
             || (preset.primary.eq_ignore_ascii_case(&cfg.theme.primary)
@@ -1414,7 +1526,12 @@ fn build_themes_tab() -> gtk4::Box {
         let swatches_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 5);
         swatches_box.set_valign(gtk4::Align::Center);
 
-        for hex in &[preset.primary, preset.secondary, preset.accent, preset.card_bg] {
+        for hex in &[
+            preset_theme.primary.as_str(),
+            preset_theme.secondary.as_str(),
+            preset_theme.accent.as_str(),
+            preset_theme.card_bg.as_str(),
+        ] {
             let pill = gtk4::Label::new(None);
             pill.add_css_class("hyprdrop-theme-pill");
             #[allow(deprecated)]
@@ -1462,8 +1579,14 @@ fn build_themes_tab() -> gtk4::Box {
 
         let apply_closure = apply_theme_fn.clone();
         let target_theme = preset_theme.clone();
+        let preset_name = preset.name;
         apply_btn.connect_clicked(move |_| {
-            apply_closure(target_theme.clone(), true);
+            let final_theme = if preset_name.contains("Matugen") {
+                ConfigManager::load_matugen_theme().unwrap_or_else(|| target_theme.clone())
+            } else {
+                target_theme.clone()
+            };
+            apply_closure(final_theme, true);
         });
 
         card.append(&apply_btn);
@@ -1647,6 +1770,64 @@ fn build_preferences_tab() -> gtk4::Box {
 
     let content_box = gtk4::Box::new(gtk4::Orientation::Vertical, 16);
     let cfg = ConfigManager::load_config();
+
+    // SECTION 0: RADIAL TRIGGER KEYBIND & CLOSED-STATE BEHAVIOR
+    let trigger_card = gtk4::Box::new(gtk4::Orientation::Vertical, 12);
+    trigger_card.add_css_class("hyprdrop-card");
+    trigger_card.add_css_class("hyprdrop-interactive-card");
+
+    let tr_header = gtk4::Box::new(gtk4::Orientation::Horizontal, 12);
+    let tr_text = gtk4::Box::new(gtk4::Orientation::Vertical, 4);
+    tr_text.set_hexpand(true);
+
+    let tr_title_row = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
+    let tr_title = gtk4::Label::new(Some("Open Radial Menu When Hyprdrop Is Exited"));
+    tr_title.add_css_class("hyprdrop-title");
+    tr_title.set_halign(gtk4::Align::Start);
+    tr_title_row.append(&tr_title);
+
+    let tr_badge = gtk4::Label::new(Some(if cfg.allow_trigger_when_closed {
+        "ENABLED (Spawns standalone menu)"
+    } else {
+        "DISABLED (Silent when exited)"
+    }));
+    tr_badge.add_css_class(if cfg.allow_trigger_when_closed { "badge-success" } else { "badge-info" });
+    tr_title_row.append(&tr_badge);
+    tr_text.append(&tr_title_row);
+
+    let tr_desc = gtk4::Label::new(Some(
+        "Control whether pressing Shift + Drag / Left-Click will open the radial menu when Hyprdrop has been exited from the system tray.\n• DISABLED (Default): Shift + Drag / Click is silent when Hyprdrop is exited. While running, it always works.\n• ENABLED: Shift + Drag / Click will always launch the radial menu even if Hyprdrop is closed.",
+    ));
+    tr_desc.add_css_class("hyprdrop-page-desc");
+    tr_desc.set_halign(gtk4::Align::Start);
+    tr_text.append(&tr_desc);
+    tr_header.append(&tr_text);
+
+    let trigger_closed_switch = gtk4::Switch::new();
+    trigger_closed_switch.set_active(cfg.allow_trigger_when_closed);
+    trigger_closed_switch.set_valign(gtk4::Align::Center);
+
+    let tr_badge_clone = tr_badge.clone();
+    trigger_closed_switch.connect_state_set(move |_, state| {
+        let mut c = ConfigManager::load_config();
+        c.allow_trigger_when_closed = state;
+        let _ = ConfigManager::save_config(&c);
+
+        if state {
+            tr_badge_clone.set_text("ENABLED (Spawns standalone menu)");
+            tr_badge_clone.remove_css_class("badge-info");
+            tr_badge_clone.add_css_class("badge-success");
+        } else {
+            tr_badge_clone.set_text("DISABLED (Silent when exited)");
+            tr_badge_clone.remove_css_class("badge-success");
+            tr_badge_clone.add_css_class("badge-info");
+        }
+        gtk4::glib::Propagation::Proceed
+    });
+
+    tr_header.append(&trigger_closed_switch);
+    trigger_card.append(&tr_header);
+    content_box.append(&trigger_card);
 
     // 1. Output Naming Architecture Card
     let naming_card = gtk4::Box::new(gtk4::Orientation::Vertical, 12);
@@ -1867,6 +2048,7 @@ fn build_preferences_tab() -> gtk4::Box {
     let jq_scale_clone = jq_scale.clone();
     let to_scale_clone = timeout_scale.clone();
     let shelf_sw_clone = shelf_switch.clone();
+    let trigger_sw_clone = trigger_closed_switch.clone();
     let fb_clone = save_feedback.clone();
 
     save_btn.connect_clicked(move |_| {
@@ -1878,6 +2060,7 @@ fn build_preferences_tab() -> gtk4::Box {
         c.jpeg_quality = jq_scale_clone.value().round() as u8;
         c.drop_shelf_timeout_secs = to_scale_clone.value().round() as u32;
         c.show_drop_shelf = shelf_sw_clone.is_active();
+        c.allow_trigger_when_closed = trigger_sw_clone.is_active();
 
         if ConfigManager::save_config(&c).is_ok() {
             fb_clone.set_text("✓ Preferences saved");
@@ -2016,6 +2199,15 @@ fn build_hyprland_and_health_tab() -> gtk4::Box {
     snip_scrolled.set_size_request(-1, 140);
 
     snippet_card.append(&snip_scrolled);
+
+    let cfg_curr = ConfigManager::load_config();
+    let bind_note = gtk4::Label::new(Some(&format!(
+        "Note: Shift+Click invokes 'hyprdrop trigger'. When Hyprdrop is exited, trigger behavior is currently {} (switchable in the Preferences tab).",
+        if cfg_curr.allow_trigger_when_closed { "ENABLED (spawns standalone menu)" } else { "DISABLED (silent when closed)" }
+    )));
+    bind_note.add_css_class("hyprdrop-page-desc");
+    bind_note.set_halign(gtk4::Align::Start);
+    snippet_card.append(&bind_note);
     content_box.append(&snippet_card);
 
     // SECTION 2: SYSTEM HEALTH DIAGNOSTICS
@@ -2080,6 +2272,64 @@ fn build_hyprland_and_health_tab() -> gtk4::Box {
         append_tool_card(&core_list, cmd, desc);
     }
     content_box.append(&core_list);
+
+    // SECTION 3: SAFE UNINSTALLATION DANGER ZONE
+    let uninst_card = gtk4::Box::new(gtk4::Orientation::Vertical, 12);
+    uninst_card.add_css_class("hyprdrop-card");
+    uninst_card.add_css_class("hyprdrop-interactive-card");
+    uninst_card.set_margin_top(8);
+
+    let u_header = gtk4::Box::new(gtk4::Orientation::Horizontal, 12);
+    let u_text = gtk4::Box::new(gtk4::Orientation::Vertical, 4);
+    u_text.set_hexpand(true);
+
+    let u_title_row = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
+    let u_title = gtk4::Label::new(Some("⚠️ Safe Uninstallation & Integration Revert"));
+    u_title.add_css_class("hyprdrop-title");
+    u_title.set_halign(gtk4::Align::Start);
+    u_title_row.append(&u_title);
+    u_text.append(&u_title_row);
+
+    let u_desc = gtk4::Label::new(Some(
+        "Safely reverts all Hyprdrop system changes:\n• Reverts Hyprland window rules and Shift+Click keybinds (with timestamped backup)\n• Unregisters Matugen dynamic theme templates from config.toml (with timestamped backup)\n• Stops and disables systemd user service\n• Cleans up desktop application shortcuts and app icons",
+    ));
+    u_desc.add_css_class("hyprdrop-page-desc");
+    u_desc.set_halign(gtk4::Align::Start);
+    u_text.append(&u_desc);
+    u_header.append(&u_text);
+
+    let uninst_btn = gtk4::Button::with_label("Uninstall Hyprdrop...");
+    uninst_btn.add_css_class("hyprdrop-ghost-danger");
+    uninst_btn.set_valign(gtk4::Align::Center);
+
+    let uninst_feedback = gtk4::Label::new(None);
+    uninst_feedback.add_css_class("badge-warning");
+    uninst_feedback.set_visible(false);
+
+    let fb_clone = uninst_feedback.clone();
+    let btn_clone = uninst_btn.clone();
+    uninst_btn.connect_clicked(move |_| {
+        match crate::uninstaller::perform_uninstall(false) {
+            Ok(report) => {
+                let count = report.messages.len();
+                fb_clone.set_text(&format!("✓ Reverted {} integration components safely! Backups preserved.", count));
+                fb_clone.remove_css_class("badge-warning");
+                fb_clone.add_css_class("badge-success");
+                fb_clone.set_visible(true);
+                btn_clone.set_sensitive(false);
+                btn_clone.set_label("Uninstalled ✓");
+            }
+            Err(e) => {
+                fb_clone.set_text(&format!("Error during revert: {}", e));
+                fb_clone.set_visible(true);
+            }
+        }
+    });
+
+    u_header.append(&uninst_btn);
+    uninst_card.append(&u_header);
+    uninst_card.append(&uninst_feedback);
+    content_box.append(&uninst_card);
 
     scrolled.set_child(Some(&content_box));
     box_view.append(&scrolled);
