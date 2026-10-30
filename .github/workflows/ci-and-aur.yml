@@ -30,11 +30,19 @@ jobs:
             libatspi-dev \
             libglib2.0-dev \
             libwayland-dev \
+            wayland-protocols \
             libgirepository1.0-dev \
+            gobject-introspection \
             librsvg2-bin \
-            libgtk4-layer-shell-dev \
+            meson \
+            ninja-build \
             pkg-config \
             gcc
+          git clone --depth 1 https://github.com/wmww/gtk4-layer-shell.git /tmp/gtk4-layer-shell
+          cd /tmp/gtk4-layer-shell
+          meson setup build --prefix=/usr
+          sudo ninja -C build install
+          sudo ldconfig
 
       - name: Setup Rust Toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -72,10 +80,19 @@ jobs:
             libatspi-dev \
             libglib2.0-dev \
             libwayland-dev \
+            wayland-protocols \
+            libgirepository1.0-dev \
+            gobject-introspection \
             librsvg2-bin \
-            libgtk4-layer-shell-dev \
+            meson \
+            ninja-build \
             pkg-config \
             gcc
+          git clone --depth 1 https://github.com/wmww/gtk4-layer-shell.git /tmp/gtk4-layer-shell
+          cd /tmp/gtk4-layer-shell
+          meson setup build --prefix=/usr
+          sudo ninja -C build install
+          sudo ldconfig
 
       - name: Setup Rust Toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -100,6 +117,8 @@ jobs:
           files: |
             dist/${{ steps.package.outputs.tar_name }}
             dist/${{ steps.package.outputs.tar_name }}.sha256
+            dist/hyprdrop-linux-x86_64.tar.gz
+            dist/hyprdrop-linux-x86_64.tar.gz.sha256
           name: Hyprdrop v${{ steps.package.outputs.version }}
           generate_release_notes: true
           draft: false

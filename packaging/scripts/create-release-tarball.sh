@@ -36,6 +36,10 @@ tar -czf "${DIST_DIR}/${TAR_NAME}" -C "${TMP_PKG}" .
 SHA256="$(sha256sum "${DIST_DIR}/${TAR_NAME}" | awk '{print $1}')"
 echo "${SHA256}  ${TAR_NAME}" > "${DIST_DIR}/${TAR_NAME}.sha256"
 
+# Also maintain unversioned release archive for direct latest download links
+cp "${DIST_DIR}/${TAR_NAME}" "${DIST_DIR}/hyprdrop-linux-x86_64.tar.gz"
+echo "${SHA256}  hyprdrop-linux-x86_64.tar.gz" > "${DIST_DIR}/hyprdrop-linux-x86_64.tar.gz.sha256"
+
 echo ""
 echo "==> Package ready:"
 echo "    Archive: ${DIST_DIR}/${TAR_NAME}"
